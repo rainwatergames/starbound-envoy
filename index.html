@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#05070f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="img/icon-192.png">
+<link rel="apple-touch-icon" href="img/icon-192.png">
+<title>Starbound Envoy</title>
+<!-- © 2026 Rainwater Games (Jeff Rainwater). All rights reserved. -->
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#05070f;color:#dfe8ff;font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden;overscroll-behavior:none}
+#app{position:relative;margin:0 auto;max-width:480px;height:100%;display:flex;flex-direction:column;overflow:hidden}
+#bg{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+#hud,#vs,#stations,#panel{position:relative;z-index:1}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+#hud{display:flex;gap:6px;align-items:center;padding:calc(6px + env(safe-area-inset-top)) 8px 4px;font-size:12px;flex:none}
+#hud .loc{flex:1;min-width:0;font-weight:700;color:#9fd4ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hud .st{white-space:nowrap;color:#cfd8ef}
+#hud .menu{flex:none;width:34px;height:30px;border:1px solid #3b5a8a;border-radius:8px;background:#0c1630;font-size:16px;line-height:1}
+#vs{flex:none;height:36vh;max-height:340px;min-height:220px;margin:4px 10px 0;position:relative}
+#cap{position:absolute;left:8px;right:8px;bottom:6px;font-size:12px;color:#bfe3ff;text-shadow:0 1px 3px #000,0 0 6px #000;text-align:center;pointer-events:none;overflow-wrap:anywhere}
+#stations{flex:none;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px 10px 6px}
+.sb{height:42px;border-radius:10px;border:1px solid #2f4d7c;background:linear-gradient(#13254a,#0a1430);font-size:13px;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;gap:5px;min-width:0;padding:0 4px}
+.sb i{font-style:normal;color:#ffcf6a}
+.sb.on{border-color:#7fd0ff;background:linear-gradient(#1f4d86,#10284f);box-shadow:0 0 10px #3fa9ff66}
+.sb.alert{border-color:#ff6a6a;animation:al 1.2s infinite}
+@keyframes al{50%{box-shadow:0 0 14px #ff4a4a}}
+#panel{flex:1;min-height:0;margin:0 10px calc(8px + env(safe-area-inset-bottom));border:1px solid #23406b;border-radius:12px;background:#070d1ecc;padding:10px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+#panel h2{margin:0 0 6px;font-size:15px;color:#9fd4ff;letter-spacing:.04em}
+#panel p{margin:4px 0 8px;overflow-wrap:anywhere}
+.btn{display:block;width:100%;text-align:left;margin:6px 0;padding:10px 12px;border-radius:10px;border:1px solid #2f4d7c;background:#0f1d3d;font-size:13px;overflow-wrap:anywhere}
+.btn:active{background:#1d3566}
+.btn.pri{background:linear-gradient(90deg,#1a5aa0,#2a7bc4);border-color:#7fc4ff;text-align:center;font-weight:700}
+.btn.warn{border-color:#a04a4a;background:#2a1020}
+.btn[disabled]{opacity:.45}
+.tone{font-size:11px;font-weight:800;color:#ffcf6a;text-transform:uppercase;margin-right:6px}
+.say{background:#0e1a36;border-left:3px solid #7fc4ff;border-radius:6px;padding:8px 10px;margin:4px 0 8px;font-style:italic;overflow-wrap:anywhere}
+#chat{max-height:46vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:4px 2px 8px;margin-bottom:6px;border-bottom:1px solid #18294a}
+.bub{max-width:84%;padding:7px 10px;border-radius:12px;font-size:13px;line-height:1.3;overflow-wrap:anywhere}
+.bub.them{align-self:flex-start;background:#0e1a36;border:1px solid #23406e;border-bottom-left-radius:3px;font-style:italic}
+.bub.me{align-self:flex-end;background:#163a2a;border:1px solid #2c6b4c;border-bottom-right-radius:3px;text-align:left}
+.bub.me .tone{display:block;font-size:10px;color:#7fe7a8;font-weight:700;margin-bottom:2px}
+.bub.note{align-self:center;max-width:94%;font-size:11px;color:#9fb6da;background:none;padding:2px 6px}
+.who{font-size:11px;color:#8fb3e6;font-style:normal;font-weight:700;display:block;margin-bottom:2px}
+.row{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #18294a;font-size:12px}
+.row .n{flex:1;min-width:0;overflow-wrap:anywhere}
+.row .q{width:28px;text-align:right;color:#9fb6da}
+.row button{flex:none;width:58px;padding:6px 0;border-radius:8px;border:1px solid #2f4d7c;background:#0f1d3d;font-size:11px;line-height:1.15}
+.row button[disabled]{opacity:.35}
+.tag{display:inline-block;font-size:10px;padding:1px 5px;border-radius:6px;background:#3a2a10;color:#ffcf6a;margin-left:4px;font-style:normal;vertical-align:1px}
+.dl{display:block;font-size:10px;color:#9fb3d9;font-style:normal}.dl.sat{color:#ff8f9a}
+.tag.w{background:#103a24;color:#7fe7a8}.tag.h{background:#3a1018;color:#ff8f9a}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:4px 8px;font-size:12px;margin:6px 0}
+.kv b{color:#8fb3e6;font-weight:700}
+.kv span{overflow-wrap:anywhere;min-width:0}
+.unk{color:#5d6f90;font-style:italic}
+.lr{display:flex;gap:10px;align-items:center;padding:8px;border:1px solid #23406b;border-radius:10px;margin:6px 0;background:#0b1530;width:100%;text-align:left}
+.lr img,.pt{width:52px;height:68px;border-radius:8px;object-fit:cover;flex:none;background:#111a30}
+.pt{display:flex;align-items:center;justify-content:center;font-size:26px;color:#3d557f}
+.lr div{flex:1;min-width:0;font-size:12px;overflow-wrap:anywhere}
+.lr strong{display:block;font-size:14px;color:#dfe8ff}
+.big{width:100%;max-height:260px;object-fit:cover;object-position:50% 25%;border-radius:10px;display:block}
+.hist{font-size:11px;color:#b9c7e2;margin:2px 0;padding-left:8px;border-left:2px solid #2f4d7c;overflow-wrap:anywhere}
+canvas.map{width:100%;display:block;border-radius:10px;background:#040814;touch-action:none}
+#toasts{position:absolute;left:12px;right:12px;top:calc(40px + env(safe-area-inset-top));z-index:5!important;pointer-events:none;display:flex;flex-direction:column;gap:4px}
+.toast{background:#0c1834ee;border:1px solid #3f6aa8;border-radius:10px;padding:6px 10px;font-size:12px;overflow-wrap:anywhere;animation:tin .25s}
+.toast.g{border-color:#3fbf7f}.toast.b{border-color:#d0525e}
+@keyframes tin{from{opacity:0;transform:translateY(-6px)}}
+.ov{position:absolute;inset:0;z-index:10!important;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 40%,#0b1a3a00,#03050bdd 70%)}
+.ov.hide{display:none}
+#title h1{margin:0;font-size:40px;line-height:1.05;letter-spacing:.06em;color:#eaf4ff;text-shadow:0 0 18px #3fa9ff,0 0 4px #9fd4ff;font-weight:900}
+#title .sub{color:#9fc4ee;font-size:13px;margin:8px 0 4px;letter-spacing:.12em;text-transform:uppercase}
+#title .ver{display:inline-block;margin:6px 0 22px;padding:2px 10px;border:1px solid #4f7ab5;border-radius:999px;font-size:12px;color:#ffcf6a}
+#title .btn{max-width:300px;text-align:center;font-weight:700;font-size:15px}
+.copy{position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));font-size:11px;color:#7f93b8;text-align:center}
+#title .spacer{height:150px}
+.modal{background:#0a1430;border:1px solid #3f6aa8;border-radius:16px;padding:16px;width:100%;max-width:360px;text-align:left;max-height:100%;overflow-y:auto}
+.modal h3{margin:0 0 10px;color:#9fd4ff}
+.slot{font-size:12px}
+.slot strong{font-size:14px;display:block}
+.small{font-size:11px;color:#8ea3c8}
+</style>
+</head><body>
+<div id="app">
+<canvas id="bg"></canvas>
+<div id="hud"><span class="loc" id="hLoc">—</span><span class="st" id="hFuel"></span><span class="st" id="hCr"></span><span class="st" id="hCargo"></span><button class="menu" id="menuBtn" aria-label="Menu">☰</button></div>
+<div id="vs"><div id="cap"></div></div>
+<div id="stations"></div>
+<div id="panel"></div>
+<div id="toasts"></div>
+<div id="title" class="ov">
+ <div class="spacer"></div>
+ <h1>STARBOUND<br>ENVOY</h1>
+ <div class="sub">Diplomacy · Intel · Exploration</div>
+ <div class="ver">v2.0.0 BETA</div>
+ <button class="btn pri" id="tContinue">Continue</button>
+ <button class="btn" id="tNew">New Game</button>
+ <button class="btn" id="tLoad">Load Game</button>
+ <div class="copy">© 2026 Rainwater Games (Jeff Rainwater). All rights reserved.</div>
+</div>
+<div id="modal" class="ov hide"></div>
+</div>
+<script src="data.js?v=2.0.0"></script>
+<script src="game.js?v=2.0.0"></script>
+<script src="install.js?v=2.0.0" data-name="Starbound Envoy" data-gate="__SB.state=title" data-bottom="44px"></script>
+</body></html>
