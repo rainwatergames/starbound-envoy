@@ -447,7 +447,7 @@ const SB_RACES = [
 { id:'ser', name:'Serenai Communion', short:'Serenai', kind:'Beautiful, dark-eyed empaths who feel every emotion in the room', speaker:'Ambassador Liora Vessane',
   img:'img/ser.webp', color:'#e88fb0', techBase:4, respectsStrength:-0.5, hatesBullies:0.8, empath:true,
   wants:['art','nectar','silk'], secretWant:'relics', taboo:'arms',
-  eyes:[[.406,.32],[.576,.30]], eyeR:.019, blink:true,
+  eyes:[[.453,.311],[.658,.350]], eyeR:.026, blink:true,
   hint:'Warm, alluring empaths who read your feelings and say them out loud. They reward sincerity and see through flattery. Once Cordial they sense other races\' lies, which gives you proof to call out liars.',
   greet:{hi:'Captain. I felt you arrive before your ship did. Warm. Curious. A little tired. Come, sit.',
     mid:'Welcome, Captain. You are nervous. You hide it well. Not from me.',

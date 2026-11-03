@@ -1,4 +1,4 @@
-/*! STARBOUND ENVOY v2.0.3 — © 2026 Rainwater Games (Jeff Rainwater). All rights reserved. */
+/*! STARBOUND ENVOY v3.1.0 — © 2026 Rainwater Games (Jeff Rainwater). All rights reserved. */
 'use strict';
 (function(){
 const VERSION='0.2';
@@ -17,29 +17,41 @@ const SB=window.__SB={state:'title',get G(){return G;},V};
 const params=new URLSearchParams(location.search);
 
 /* ---------------- world generation ---------------- */
+function showIntro(){const d=document.createElement('div');d.id='intro';
+  d.innerHTML='<canvas id="introSky"></canvas><div class="itx"><div class="ihd">STARBOUND ENVOY</div><div class="small">TERRAN CONCORD · v3.1.0</div><p>You are an envoy of the Terran Concord, sent from Earth past the last charted star.</p><p>Find the living worlds no one has met. Learn their secrets.</p><p>Bind the galaxy together, one trade route at a time.</p><button class="btn pri" id="introGo">Begin</button><div class="small">tap anywhere to skip</div></div>';
+  document.body.appendChild(d);const c=d.querySelector('canvas'),x=c.getContext('2d');c.width=innerWidth;c.height=innerHeight;
+  const st=[...Array(160)].map(()=>({x:Math.random()*c.width,y:Math.random()*c.height,z:Math.random()*2+.3}));let on=true;
+  (function fr(){if(!on)return;x.fillStyle='rgba(3,6,18,.45)';x.fillRect(0,0,c.width,c.height);st.forEach(p=>{p.y+=p.z*.6;if(p.y>c.height){p.y=0;p.x=Math.random()*c.width;}x.fillStyle='rgba(200,225,255,'+(.3+p.z/3)+')';x.fillRect(p.x,p.y,p.z,p.z);});requestAnimationFrame(fr);})();
+  const end=()=>{d.classList.add('out');setTimeout(()=>{on=false;d.remove();introToast();},700);};d.addEventListener('click',end,{once:true});}
+SB.showIntro=()=>showIntro();
 function newGame(slot,seed){
   seed=seed||((Date.now()^Math.floor(Math.random()*1e9))>>>0);
   const r=rng(seed);
-  const names=shuffle(r,SB_SYSNAMES).slice(0,40);
+  // v2.1: cohab races share a partner's homeworld; 10 empty worlds; 3 cols x 24 rows
+  const solo=SB_RACES.filter(rc=>!rc.cohab||!RACE[rc.cohab]),NEMPTY=10;
+  const names=shuffle(r,SB_SYSNAMES).slice(0,solo.length+NEMPTY);
   const pts=[];
   const all=[...SB_PORTS.map(n=>({name:n,port:true})),...names.map(n=>({name:n}))];
-  // staggered jittered grid (3 cols x 14 rows) keeps 42 systems readable on a phone map
-  const cells=[];for(let rw=0;rw<14;rw++)for(let c=0;c<3;c++)cells.push([c,rw]);
-  const ci=cells.findIndex(([c,rw])=>c===1&&rw===6);const order=[cells[ci],...shuffle(r,cells.filter((_,i)=>i!==ci))];
+  const ROWS=Math.ceil(all.length/3),dy=.97/ROWS;
+  const cells=[];for(let rw=0;rw<ROWS;rw++)for(let c=0;c<3;c++)cells.push([c,rw]);
+  const ci=cells.findIndex(([c,rw])=>c===1&&rw===Math.floor(ROWS/2));const order=[cells[ci],...shuffle(r,cells.filter((_,i)=>i!==ci))];
   all.forEach((s,i)=>{const [c,rw]=order[i];
-    pts.push({x:.05+c*.33+(rw%2?.06:0)+(r()-.5)*.03,y:.025+rw*.0715+(r()-.5)*.02});
+    pts.push({x:.05+c*.33+(rw%2?.06:0)+(r()-.5)*.03,y:.015+rw*dy+(r()-.5)*dy*.28});
   });
   const systems=all.map((s,i)=>({id:i,name:s.name,port:!!s.port,x:pts[i].x,y:pts[i].y,
     type:s.port?'station':pick(r,SB_PTYPES),owner:null,rich:[],scan:0,derelict:false,tex:Math.floor(r()*1e9)}));
-  const worlds=shuffle(r,systems.filter(s=>!s.port).map(s=>s.id));
+  const worlds=shuffle(r,systems.filter(s=>!s.port&&s.id!==0).map(s=>s.id));
   const races={};
-  SB_RACES.forEach((rc,i)=>{
+  solo.forEach((rc,i)=>{
     const sys=systems[worlds[i]];sys.owner=rc.id;
     const pool=SB_RES.map(x=>x.id).filter(x=>!rc.wants.includes(x)&&x!==rc.taboo&&x!==rc.secretWant);
     sys.rich=shuffle(r,pool).slice(0,3);
     races[rc.id]={home:sys.id,tech:clamp(rc.techBase+Math.round((r()-.5)*2),1,5),rep:0};
   });
-  systems.forEach(s=>{ if(!s.owner&&!s.port){ s.rich=shuffle(r,SB_RES.map(x=>x.id)).slice(0,2); s.derelict=r()<.45; } if(s.port) s.rich=shuffle(r,SB_RES.map(x=>x.id)).slice(0,9); });
+  if(races.kth){const h=systems[races.kth.home];const far=systems.filter(x=>x.owner&&!x.port).sort((p,q)=>Math.hypot(q.x-.5,q.y-.5)-Math.hypot(p.x-.5,p.y-.5))[0];if(far&&far!==h){const o=far.owner;far.owner='kth';h.owner=o;races[o].home=h.id;races.kth.home=far.id;const t=far.rich;far.rich=h.rich;h.rich=t;}}
+  SB_RACES.forEach(rc=>{if(races[rc.id])return;const hs=systems[races[rc.cohab].home];hs.co=rc.id;
+    races[rc.id]={home:hs.id,tech:clamp(rc.techBase+Math.round((r()-.5)*2),1,5),rep:0};});
+  systems.forEach(s=>{ if(!s.owner&&!s.port){ s.rich=shuffle(r,SB_RES.map(x=>x.id)).slice(0,2); s.derelict=r()<.6; } if(s.port) s.rich=shuffle(r,SB_RES.map(x=>x.id)).slice(0,9); });
   // relationships: baseline plus random shuffles
   const rel={};
   SB_RELATIONS.forEach(([a,b,v])=>rel[pk(a,b)]=v);
@@ -54,10 +66,14 @@ function newGame(slot,seed){
   return G;
 }
 function pk(a,b){return a<b?a+'|'+b:b+'|'+a;}
-function relOf(a,b){return (G.rel[pk(a,b)])||0;}
+function relOf(a,b){if((RACE[a]&&RACE[a].isolationist)||(RACE[b]&&RACE[b].isolationist))return 0;return (G.rel[pk(a,b)])||0;}
 const sys=id=>G.systems[id];
 const here=()=>sys(G.loc);
 const homeOf=rid=>sys(G.races[rid].home);
+// v2.1 shared worlds: who lives here, and who you are talking to
+const residents=s=>[s.owner,s.co].filter(Boolean);
+const act=s=>{const w=G.visit&&G.visit.with;return w&&residents(s).includes(w)?w:s.owner;};
+function lies(rid){const rc=RACE[rid];if(!rc.liar)return false;if(rc.lieRate==null)return true;const L=G.visit.lieRoll=G.visit.lieRoll||{};if(L[rid]==null)L[rid]=Math.random()<rc.lieRate;return L[rid];}
 
 /* ---------------- knowledge / log ---------------- */
 function truth(rid,f){
@@ -78,12 +94,92 @@ function know(rid,f,v,rumored){
   const k=kn(rid);
   if(v===undefined)v=truth(rid,f);
   if(!k[f]||k[f].r||!rumored)k[f]={v,r:!!rumored};
+  if(!k.portrait){G.rsrc=G.rsrc||{};if(!G.rsrc[rid])G.rsrc[rid]=V.src||'Subspace chatter';}
 }
-function meet(rid){const k=kn(rid);if(!k.name||k.name.r)know(rid,'name',true);if(!k.portrait)k.portrait={v:true};}
+function meet(rid){const k=kn(rid);if(!k.name||k.name.r)know(rid,'name',true);if(!k.loc||k.loc.r)know(rid,'loc');if(!k.portrait){k.portrait={v:true};milestones();}}
+/* v3 compendium milestones */
+const MILES=[[10,150,'Xenologist'],[25,400,'Pathfinder'],[50,800,'Star Cartographer'],[88,1500,'Envoy of All Worlds']];
+function foundCount(){return SB_RACES.filter(r=>G.kn[r.id]&&G.kn[r.id].portrait).length;}
+function milestones(){G.miles=G.miles||{};const n=foundCount();MILES.forEach(([m,cr,t])=>{if(n>=m&&!G.miles[m]){G.miles[m]=G.turn;G.credits+=cr;toast('Compendium milestone: '+m+' species found! Title "'+t+'" and ¢'+cr+'.','g');}});}
+/* v3 hull, upgrades, fees */
+const UPG={cargo:{n:'Cargo pods (+20 hold)',c:400},scanner:{n:'Deep scanner (cheaper scans, more clues)',c:300},engines:{n:'Ion engines (−25% fuel)',c:500},shields:{n:'Shield array (half damage)',c:450},resist:{n:'Charm dampener (see through beguiling offers)',c:250}};
+const REPAIR_PER=3,DOCK_FEE=8,SCAN_CR=20;
+function damage(n,why){G.hull=G.hull==null?100:G.hull;if(G.up&&G.up.shields)n=Math.ceil(n/2);G.hull=Math.max(0,G.hull-n);G.ls=Math.max(0,(G.ls==null?100:G.ls)-Math.ceil(n*.6));(G.dmg=G.dmg||[]).push('T'+G.turn+': −'+n+'% '+why);if(G.dmg.length>6)G.dmg.shift();let t='Minor scrape: hull −'+n+'% ('+why+'). Repair at any port when convenient.';
+  if(G.hull<=15){friendlyTow('hull worn thin');return n;}
+  toast(t);return n;}
+const TOW_FEE=15;
+function nearestPort(){return G.systems.filter(x=>x.port).sort((p,q)=>dist(G.loc,p.id)-dist(G.loc,q.id))[0];}
+function friendlyTow(why){const p=nearestPort(),fee=Math.min(G.credits,TOW_FEE);G.credits-=fee;G.hull=Math.max(G.hull,40);G.ls=Math.max(G.ls==null?100:G.ls,60);if(G.fuel<20)G.fuel=20;G.loc=p.id;V.sel=null;
+  toast('A friendly tug crew tows you to '+p.name+' ('+why+'). They patch you up for '+(fee?'¢'+fee:'free')+'. No harm done.','g');}
+function canRepair(s){return s.port||(s.owner&&G.races[act(s)]&&G.races[act(s)].rep>=15&&kn(act(s)).portrait);}
+function repairCost(){return Math.min(G.credits,(100-(G.hull==null?100:G.hull))*REPAIR_PER);}
+function repair(){const s=here();if(!canRepair(s))return;const c=repairCost(),pts=Math.floor(c/REPAIR_PER);if(!pts)return;G.credits-=pts*REPAIR_PER;G.hull=Math.min(100,G.hull+pts);if(G.hull>=100){G.ls=100;G.dmg=[];}else G.ls=Math.min(100,(G.ls==null?100:G.ls)+pts);toast('Repaired '+pts+'% for ¢'+pts*REPAIR_PER+'.','g');commit();}
+function upCost(k){return G.forgeDeal?Math.round(UPG[k].c*.7):UPG[k].c;}
+function buyUpg(k){const s=here(),u=UPG[k];G.up=G.up||{};if(!s.port||G.up[k]||G.credits<upCost(k))return;G.credits-=upCost(k);G.forgeDeal=0;G.up[k]=G.turn;if(k==='cargo')G.cargoMax+=20;toast('Installed: '+u.n+'.','g');commit();}
+function yardHtml(){const s=here();G.hull=G.hull==null?100:G.hull;let h='';if(!canRepair(s)&&!s.port)return'<p class="small">Hull '+G.hull+'%. Repairs at ports or friendly worlds.</p>';
+  h+='<h2>SHIPYARD</h2><p class="small">Hull integrity '+G.hull+'% · repairs ¢'+REPAIR_PER+' per %</p>';
+  h+='<button class="btn" data-a="repair" '+(G.hull>=100||!repairCost()?'disabled':'')+'>🔧 Repair hull'+(G.hull>=100?' · pristine':' · ¢'+repairCost())+'</button>';
+  if(s.port){G.up=G.up||{};Object.keys(UPG).forEach(k=>{const u=UPG[k],own=G.up[k];h+='<button class="btn" data-a="upg" data-v="'+k+'" '+(own||G.credits<upCost(k)?'disabled':'')+'>'+(own?'✓ ':'')+esc(u.n)+(own?' · installed':' · ¢'+upCost(k))+'</button>';});}
+  return h;}
+function lifeTick(){G.ls=G.ls==null?100:G.ls;G.morale=G.morale==null?80:G.morale;
+  if(G.ls<50){G.morale=Math.max(40,G.morale-2);toast('Life support is a bit stuffy ('+G.ls+'%). The crew would love a repair stop.');}
+  else G.morale=Math.min(100,G.morale+3);
+  if(G.ls<25)V.towPending='life support running low';}
+function moraleMult(){return 1;}
+function jumpRange(){return (G.fuel/(42*(G.up&&G.up.engines?.75:1))*10).toFixed(1);}
+function bar(v,col){return'<span class="gbar"><i style="width:'+Math.max(0,Math.min(100,v))+'%;background:'+(v<50?'#e8c37a':(col||'#5fe3a1'))+'"></i></span>';}
+function addLead(rid,text){const L=G.leads=G.leads||[];const t=String(text).replace(/^"|"$/g,'');if(L.some(l=>l.rid===rid&&l.text===t))return;L.push({rid,text:t,turn:G.turn});if(L.length>30)L.shift();}
+function missions(){const out=[];const loc=r=>RACE[r]&&kn(r).loc&&!kn(r).loc.r?homeOf(r):null;
+  if(typeof SB_QUESTS!=='undefined')SB_QUESTS.forEach(c=>{const q=(G.q||{})[c.id];if(!q)return;const st=c.steps[Math.min(q.step,c.steps.length-1)];
+    out.push({key:'q'+c.id,grp:q.done?'done':'active',from:c.steps[0].r,title:c.name,goal:c.steps[0].goal,next:q.done?'Complete. Reward collected.':c.steps[q.step-1].goal,at:q.done?null:loc(st.r),status:q.done?'Completed':'Step '+q.step+'/'+c.steps.length});});
+  favs().forEach((f,i)=>{const done=f.state==='done',open=f.state==='open';out.push({key:'f'+i,grp:open?'active':done?'done':'failed',from:f.from,title:'Favor: '+FAV_KIND[f.kind].item,goal:'Carry '+FAV_KIND[f.kind].item+' to the '+RACE[f.to].short+'.',next:open?'Deliver at '+sys(G.races[f.to].home).name:'',at:open?sys(G.races[f.to].home):null,status:open?'Open · '+favorRewardText(f):done?'Delivered':'Failed'});});
+  (G.leads||[]).forEach((l,i)=>out.push({key:'l'+i,grp:'lead',from:l.rid,title:'The '+RACE[l.rid].short+' mentioned a need',goal:l.text,next:'Bring what they want to their market.',at:loc(l.rid),status:'Lead · T'+l.turn}));
+  Object.keys(G.rsrc||{}).forEach(r=>{if(kn(r).portrait)return;const k=kn(r);out.push({key:'r'+r,grp:'lead',from:null,title:'Find: '+(k.name?raceName(r):'unnamed signal'),goal:'Rumored species. Source: '+G.rsrc[r]+'.',next:k.loc?'Investigate '+k.loc.v+(k.loc.r?' (unconfirmed)':''):'Location unknown. Deep scans may find coordinates.',at:k.loc?G.systems.find(x=>x.name===k.loc.v):null,status:'Rumored'});});
+  return out;}
+function missionBadgeCount(){const M=G.mseen||{};return missions().filter(m=>M[m.key]!==m.status+m.next).length;}
+const missionView=()=>{const all=missions(),M=G.mseen=G.mseen||{};let h='<h2>MISSION LOG</h2>'+(V.logFrom?'<button class="btn pri" data-a="logret">‹ Back to conversation</button>':'');
+  [['active','ACTIVE'],['lead','LEADS & HINTS'],['done','COMPLETED'],['failed','FAILED']].forEach(([g,lab])=>{const L=all.filter(m=>m.grp===g);if(!L.length&&g==='failed')return;
+    h+='<div class="cxh">'+lab+' · '+L.length+'</div>';if(!L.length){h+='<p class="small">'+(g==='active'?'No active missions. Friendly species may ask for help when hailed.':'Nothing yet.')+'</p>';return;}
+    h+='<ul class="ml">'+L.map(m=>{const sig=m.status+m.next,bd=M[m.key]==null?'<span class="nb">NEW</span>':M[m.key]!==sig?'<span class="nb up">UPDATED</span>':'';
+      const pr=m.from&&kn(m.from).portrait?'<img src="'+RACE[m.from].img+'" alt="">':'<span class="pt sil">?</span>';
+      return'<li class="mi '+g+'">'+pr+'<div><b>'+esc(m.title)+'</b>'+bd+'<br><span class="small">'+(m.from&&kn(m.from).portrait?'From the '+esc(RACE[m.from].short)+' · ':'')+esc(m.status)+'</span><br>'+esc(m.goal)+(m.next?'<br><span class="nx">▸ '+esc(m.next)+'</span>':'')+(m.at?'<br><button class="cx mapgo" data-a="mapgo" data-v="'+m.at.id+'">◎ '+esc(m.at.name)+'</button>':'')+'</div></li>';}).join('')+'</ul>';});
+  V.markSeen=all.map(m=>[m.key,m.status+m.next]);return h;};
+const statusView=()=>{const s=here();G.hull=G.hull==null?100:G.hull;G.ls=G.ls==null?100:G.ls;G.morale=G.morale==null?80:G.morale;G.up=G.up||{};
+  let h='<h2>ENGINEERING · SHIP STATUS</h2>'+(V.logFrom?'<button class="btn pri" data-a="logret">‹ Back to conversation</button>':'');
+  const sh=G.up.shields?100:50,ls=G.ls;
+  h+='<div class="con"><div class="cr"><b>HULL</b>'+bar(G.hull)+'<span>'+G.hull+'%</span></div>'+((G.dmg||[]).length?'<div class="cn">'+(G.hull<50?'Hull below 50%: jumps use 15% more fuel until repaired.<br>':'')+G.dmg.map(esc).join('<br>')+'</div>':'<div class="cn">No outstanding damage.</div>')+
+   '<div class="cr"><b>SHIELDS</b>'+bar(sh,'#7fd0ff')+'<span>'+sh+'%</span></div><div class="cn">'+(G.up.shields?'Shield array: incoming damage halved.':'Stock emitters. A shield array halves damage.')+'</div>'+
+   '<div class="cr"><b>FUEL</b>'+bar(G.fuel*100/G.fuelMax,'#ffd36b')+'<span>'+Math.round(G.fuel)+'/'+G.fuelMax+'</span></div><div class="cn">Est. jump range ≈ '+jumpRange()+' ly'+(G.up.engines?' (ion engines)':'')+'</div>'+
+   '<div class="cr"><b>LIFE SUPPORT</b>'+bar(ls)+'<span>'+ls+'%</span></div><div class="cn">'+(ls>=75?'Nominal.':ls>=50?'A little stuffy from hull wear. Repairs freshen it up.':'Running low. If it dips further a friendly tug will tow you to port (¢'+TOW_FEE+').')+'</div>'+
+   '<div class="cr"><b>CREW MORALE</b>'+bar(G.morale,'#c59bff')+'<span>'+G.morale+'%</span></div><div class="cn">'+(G.morale<60?'Terran Concord crew of 12: a bit weary, a port stop will cheer them up.':'Terran Concord crew of 12, in good spirits.')+'</div>'+
+   '<div class="cr"><b>CREDITS</b><span class="cv">¢'+G.credits+'</span></div></div>';
+  h+='<div class="cxh">CARGO HOLD · '+cargoUsed()+'/'+G.cargoMax+'</div>'+bar(cargoUsed()*100/G.cargoMax,'#7fd0ff');
+  const ids=Object.keys(G.cargo).filter(k=>G.cargo[k]>0);
+  h+=ids.length?'<table class="ct"><tr><th>Item</th><th>Qty</th><th>Avg paid</th></tr>'+ids.map(k=>{const P=G.paid&&G.paid[k];return'<tr><td>'+esc(RES[k].name)+'</td><td>'+G.cargo[k]+'</td><td>'+(P&&P.q?'¢'+Math.round(P.c/P.q):'—')+'</td></tr>';}).join('')+'</table>':'<p class="small">Hold empty.</p>';
+  h+='<div class="cxh">UPGRADES</div><p class="small">'+Object.keys(UPG).map(k=>(G.up[k]?'✓ ':'· ')+esc(UPG[k].n)+(G.up[k]?'':' (not installed)')).join('<br>')+'</p>';
+  if(s.port||canRepair(s)){h+='<div class="cxh">DOCKED SERVICES</div>'+refuelBtn()+'<button class="btn" data-a="repair" '+(G.hull>=100||!repairCost()?'disabled':'')+'>🔧 Repair hull'+(G.hull>=100?' · pristine':' · ¢'+repairCost())+'</button>';}
+  return h;};
+function bribeCost(rid){return 40+Math.max(0,-Math.round(G.races[rid].rep))*2;}
+/* v3 quests */
+function qState(){return G.q=G.q||{};}
+function qStart(rid){if(typeof SB_QUESTS==='undefined')return;const Q=qState();const t=tier(rid);if(t==='hostile'||t==='wary')return;
+  const c=SB_QUESTS.find(c=>!c.manual&&!Q[c.id]&&c.steps[0].r===rid&&c.steps.every(x=>RACE[x.r]));if(!c)return;
+  Q[c.id]={step:1,start:G.turn};V.dlg.lines.push({who:RACE[rid].speaker,text:c.steps[0].say});V.dlg.lines.push({who:'',text:'New quest: '+c.name+'. '+c.steps[0].goal+'.'});hist(rid,'Asked you: '+c.name+'.');}
+function qEvent(type,rid,g){if(typeof SB_QUESTS==='undefined')return[];const Q=qState(),out=[];
+  SB_QUESTS.forEach(c=>{const q=Q[c.id];if(!q||q.done)return;const st=c.steps[q.step];if(!st||st.t!==type||st.r!==rid||(st.g&&st.g!==g))return;
+    out.push(st.say);q.step++;if(q.step>=c.steps.length){q.done=G.turn;const R=c.reward;G.credits+=R.cr||0;Object.entries(R.rep||{}).forEach(([r,n])=>{if(RACE[r])addRep(r,n,'quest: '+c.name);});
+      for(let i=0;i<(R.intel||0);i++){const t=SB_RACES.find(x=>!kn(x.id).loc);if(t){V.src=RACE[c.steps[0].r].short+' (quest reward)';know(t.id,'loc');}}
+      out.push('Quest complete: '+c.name+'. +¢'+(R.cr||0)+(R.intel?' and star-chart intel':'')+'.');toast('Quest complete: '+c.name,'g');}
+    else out.push('Quest updated: '+c.steps[q.step-1].goal+'.');});
+  return out;}
+function questsHtml(){if(typeof SB_QUESTS==='undefined')return'';const Q=qState();const act0=SB_QUESTS.filter(c=>Q[c.id]);
+  let h='<div class="cxh">QUESTS · '+act0.filter(c=>Q[c.id].done).length+'/'+SB_QUESTS.length+' complete</div>';
+  if(!act0.length)return h+'<p class="small">No quests yet. Friendly species sometimes ask for help when hailed.</p>';
+  act0.forEach(c=>{const q=Q[c.id];h+='<p class="small"><b>'+(q.done?'✓ ':'▸ ')+esc(c.name)+'</b> · step '+Math.min(q.step,c.steps.length)+'/'+c.steps.length+'<br>'+(q.done?'Complete.':esc(c.steps[q.step-1].goal))+'</p>';});return h;}
 function hist(rid,text){(G.hist[rid]=G.hist[rid]||[]).push('T'+G.turn+': '+text);}
 function rumor(fromRid){
   const others=SB_RACES.filter(x=>x.id!==fromRid);
-  const rid=pick(Math.random,others).id;
+  const rid=pick(Math.random,others).id;V.src=fromRid&&RACE[fromRid]?'The '+RACE[fromRid].short:'Port gossip';
   const f=pick(Math.random,['loc','wants','allies','enemies','tech','rich']);
   const honest=Math.random()<.7;
   let v=truth(rid,f);
@@ -116,10 +212,11 @@ function verifyHome(rid){ // visiting / scanning a homeworld confirms everything
 
 /* ---------------- reputation & politics ---------------- */
 function repLabel(v){return v<=-50?'Hostile':v<=-15?'Wary':v<15?'Neutral':v<40?'Cordial':v<70?'Friendly':'Allied';}
-function addRep(rid,d,why,quiet){
+function trx(t){t=String(t);if(t.indexOf('⟪')<0)return t;return (G.up&&G.up.scanner)||G.translate?t.replace(/⟪(.*?)⟫/g,' [Translated: $1]'):t.replace(/⟪.*?⟫/g,'')+(/⟪/.test(t)?' (A scanner upgrade could translate more.)':'');}
+function addRep(rid,d,why,quiet){if(RACE[rid]&&RACE[rid].moody&&d)d=Math.round(d*(.6+Math.random()*.8))||Math.sign(d);
   if(!RACE[rid]||!d)return;
   const st=G.races[rid];const old=st.rep;st.rep=clamp(Math.round((st.rep+d)*10)/10,-100,100);
-  const real=Math.round(st.rep-old);
+  const real=Math.round(st.rep-old);repLog(rid);
   if(!quiet&&kn(rid).name&&real!==0)toast(RACE[rid].short+(real>0?' approve':' disapprove')+(why?' ('+why+')':'')+' '+(real>0?'+':'')+real,real>0?'g':'b');
 }
 // Helping/trading with a race ripples to its allies (+) and enemies (-)
@@ -150,7 +247,7 @@ function save(){ if(!G||!G.slot)return; G.savedAt=Date.now();
 function readSlot(n){try{const s=localStorage.getItem(SK(n));return s?JSON.parse(s):null;}catch(e){return null;}}
 // old saves (pre-0.2) lack newer races: give each a fresh home system in a free spot of the map
 function migrate(g0){if(!g0||!g0.systems)return g0;const r=rng((g0.seed||1)+77);const used=new Set(g0.systems.map(s=>s.name));
-  SB_RACES.forEach(rc=>{if(g0.races[rc.id])return;let x,y,best=null,bd=-1;for(let t=0;t<300;t++){x=.08+r()*.84;y=.07+r()*.86;const d=Math.min(...g0.systems.map(s=>Math.hypot(s.x-x,s.y-y)));if(d>bd){bd=d;best=[x,y];}}
+  SB_RACES.forEach(rc=>{if(g0.races[rc.id])return;if(rc.cohab&&g0.races[rc.cohab]){const hs=g0.systems[g0.races[rc.cohab].home];if(hs&&!hs.co){hs.co=rc.id;g0.races[rc.id]={home:hs.id,tech:clamp(rc.techBase+Math.round((r()-.5)*2),1,5),rep:0};SB_RELATIONS.forEach(([a,b,v])=>{if(a===rc.id||b===rc.id)g0.rel[pk(a,b)]=v;});SB_RACES.forEach(o=>{if(o.friendAll&&o.id!==rc.id)g0.rel[pk(o.id,rc.id)]=1;});return;}}let x,y,best=null,bd=-1;for(let t=0;t<300;t++){x=.08+r()*.84;y=.07+r()*.86;const d=Math.min(...g0.systems.map(s=>Math.hypot(s.x-x,s.y-y)));if(d>bd){bd=d;best=[x,y];}}
     const name=SB_SYSNAMES.find(n=>!used.has(n))||(rc.short+' Prime');used.add(name);const pool=SB_RES.map(z=>z.id).filter(z=>!rc.wants.includes(z)&&z!==rc.taboo&&z!==rc.secretWant);
     const s={id:g0.systems.length,name,port:false,x:best[0],y:best[1],type:pick(r,SB_PTYPES),owner:rc.id,rich:shuffle(r,pool).slice(0,3),scan:0,derelict:false,tex:Math.floor(r()*1e9)};g0.systems.push(s);
     g0.races[rc.id]={home:s.id,tech:clamp(rc.techBase+Math.round((r()-.5)*2),1,5),rep:0};
@@ -366,25 +463,26 @@ function toast(msg,kind){const el=document.createElement('div');el.className='to
   while(box.children.length>4)box.removeChild(box.firstChild);setTimeout(()=>el.remove(),3600);}
 function cargoUsed(){return Object.values(G.cargo).reduce((a,b)=>a+b,0)+(G.favors?G.favors.filter(f=>f.state==='open').length:0);}
 function commit(){ save(); renderAll(); }
-const STATIONS=[['helm','Helm','✦'],['science','Science','◎'],['comms','Comms','☏'],['trade','Trade','⇄'],['tactical','Tactical','⚔'],['log','Log','▤']];
+const STATIONS=[['helm','Helm','✦'],['science','Science','◎'],['comms','Comms','☏'],['trade','Trade','⇄'],['tactical','Tactical','⚔'],['status','Status','⚙'],['missions','Missions','☰'],['log','Log','▤']];
 function renderStations(){
-  $('stations').innerHTML=STATIONS.map(([id,l,i])=>'<button class="sb'+(V.view===id?' on':'')+(id==='tactical'&&G.enc&&G.enc.state==='active'?' alert':'')+'" data-st="'+id+'"><i>'+i+'</i>'+l+'</button>').join('');
+  $('stations').innerHTML=STATIONS.map(([id,l,i])=>'<button class="sb'+(V.view===id?' on':'')+(id==='tactical'&&G.enc&&G.enc.state==='active'?' alert':'')+'" data-st="'+id+'"><i>'+i+'</i>'+l+(id==='missions'&&missionBadgeCount()?'<em class="sbb">'+missionBadgeCount()+'</em>':'')+'</button>').join('');
 }
 function renderHud(){
   const s=here();$('hLoc').textContent=s.name+(s.port?' (port)':'');
-  $('hFuel').textContent='⛽'+Math.round(G.fuel);$('hCr').textContent='¢'+G.credits;$('hCargo').textContent='📦'+cargoUsed()+'/'+G.cargoMax;
+  $('hFuel').textContent='⛽'+Math.round(G.fuel)+' ⛨'+(G.hull==null?100:G.hull);$('hCr').textContent='¢'+G.credits;$('hCargo').textContent='📦'+cargoUsed()+'/'+G.cargoMax;
   const o=s.owner&&kn(s.owner).loc&&!kn(s.owner).loc.r?RACE[s.owner].short+' space':(s.port?'Free port':'Uncharted');
   $('cap').textContent=vsMode()==='portrait'?RACE[V.dlg.rid].speaker+' · '+RACE[V.dlg.rid].name:vsMode()==='ship'?(G.enc.name+' · '+G.enc.state):(s.name+' · '+o);
 }
-function renderAll(){ if(!G)return; renderHud(); renderStations(); const fn=VIEWS[V.view]; $('panel').innerHTML=fn(); $('panel').scrollTop=V.keepScroll?$('panel').scrollTop:0; afterRender(); }
-function afterRender(){ if(V.view==='helm')drawMap(); const c=$('chat');if(c)c.scrollTop=c.scrollHeight; }
+function renderAll(){ if(!G)return; renderHud(); if(V.markSeen&&V.view!=='missions'){V.markSeen.forEach(([k,v])=>{(G.mseen=G.mseen||{})[k]=v;});V.markSeen=null;} renderStations(); const fn=VIEWS[V.view]; $('panel').innerHTML=fn(); $('panel').scrollTop=V.keepScroll?$('panel').scrollTop:0; afterRender(); }
+function afterRender(){ if(V.view==='helm'){drawMap();const c=$('map'),pn=$('panel');if(c&&pn&&(V.mapAt!==G.loc||V.mapFocus!=null)){V.mapAt=G.loc;const fy=V.mapFocus!=null?sys(V.mapFocus).y:here().y;V.mapFocus=null;const y=12+fy*(c.clientHeight-24);const cr=c.getBoundingClientRect(),pr=pn.getBoundingClientRect();pn.scrollTop=Math.max(0,pn.scrollTop+cr.top-pr.top+y-pn.clientHeight/2);}} const c=$('chat');if(c)c.scrollTop=c.scrollHeight; }
 function raceName(rid){const k=kn(rid);return k.name?RACE[rid].short+(k.name.r?' (rumored)':''):'Unknown species';}
-function fieldHtml(rid,f,fmt){const k=kn(rid)[f];if(!k)return'<span class="unk">Unknown</span>';return esc(fmt(k.v))+(k.r?'<span class="tag">rumored</span>':'');}
+function fieldHtml(rid,f,fmt){const k=kn(rid)[f];if(!k)return UNK;return esc(fmt(k.v))+(k.r?'<span class="tag">rumored</span>':'');}
 const resList=a=>a.map(x=>RES[x].icon+' '+RES[x].name).join(', ');
 const raceList=a=>a.length?a.map(x=>kn(x).name?RACE[x].short:'an unknown species').join(', '):'None known';
 
 /* ---------------- views ---------------- */
 const VIEWS={};
+VIEWS.status=statusView;VIEWS.missions=missionView;
 VIEWS.helm=()=>{
   const s=V.sel!=null?sys(V.sel):null;let h='<h2>HELM · GALAXY MAP</h2><canvas class="map" id="map"></canvas>';
   if(s&&s.id!==G.loc){const d=dist(G.loc,s.id),cost=fuelCost(d);
@@ -392,18 +490,19 @@ VIEWS.helm=()=>{
     if(cost<=G.fuel)h+='<button class="btn pri" data-a="warp">Engage warp to '+esc(s.name)+' (⛽ '+cost+' fuel)</button>';
     else h+='<p class="small">Not enough fuel for that jump. No problem: the ship can limp to the nearest port, where you can top up for a few credits (or free if you are broke).</p><button class="btn pri" data-a="limp">Limp to nearest port</button>';
   } else h+='<p class="small">Tap a star system to plot a course. Refuel free at Haven Station, or for about ¢1 per unit elsewhere; there is no clock, so explore at your own pace.</p>';
-  if(!(s&&s.id!==G.loc))h+=refuelBtn();
+  if(!(s&&s.id!==G.loc))h+=refuelBtn()+yardHtml();
   return h;
 };
 VIEWS.science=()=>{
   const s=here();let h='<h2>SCIENCE · '+esc(s.name.toUpperCase())+'</h2>';
   if(s.scan<1){h+='<p>Planetary sensors ready. A survey scan reveals the world, its inhabitants and its richest resources.</p><button class="btn pri" data-a="scan1">Run survey scan</button>';return h;}
   h+='<div class="kv"><b>World type</b><span>'+cap(s.type)+'</span><b>Rich in</b><span>'+resList(s.rich)+'</span>';
-  if(s.owner){const st=G.races[s.owner];h+='<b>Inhabitants</b><span>'+esc(RACE[s.owner].name)+'</span><b>Tech level</b><span>'+TECH_NAMES[st.tech]+' ('+st.tech+'/5) — '+techCompare(st.tech)+'</span>';}
+  if(s.owner)residents(s).forEach(o=>{const st=G.races[o];h+='<b>Inhabitants</b><span>'+esc(RACE[o].name)+'</span><b>Tech level</b><span>'+TECH_NAMES[st.tech]+' ('+st.tech+'/5) — '+techCompare(st.tech)+'</span>';});
+  else if(!s.port)h+='<b>Inhabitants</b><span>None. '+(s.scan>=2?(s.looted?'Salvage recovered.':'Deep scan complete.'):'A deep scan may find ruins, derelicts or old signals.')+'</span>';
   else if(s.port)h+='<b>Inhabitants</b><span>Mixed traders, free port</span>';
   else h+='<b>Inhabitants</b><span>None detected</span>';
   h+='</div>';
-  if(s.scan<2){h+='<p class="small">A deep scan sweeps subspace chatter, buried ruins and encrypted traffic for hidden intel (uses 3 fuel).</p><button class="btn pri" data-a="scan2">Run deep scan</button>';}
+  if(s.scan<2){h+='<p class="small">A deep scan sweeps subspace chatter, buried ruins and encrypted traffic: true stock, defenses, distress calls, salvage and coordinates (3 fuel + ¢'+(G.up&&G.up.scanner?SCAN_CR/2:SCAN_CR)+' in probe drones).</p><button class="btn pri" data-a="scan2">Run deep scan</button>';}
   else h+='<p class="small">Deep scan complete. Findings are in your Computer Log.</p>'+(V.lastScan?'<div class="say">'+V.lastScan.map(esc).join('<br>')+'</div>':'');
   return h;
 };
@@ -412,11 +511,12 @@ VIEWS.comms=()=>{
   if(G.enc&&G.enc.state==='active'&&!D)return'<h2>COMMS</h2><p>An armed vessel, the <b>'+esc(G.enc.name)+'</b>, is on an intercept course.</p><button class="btn pri" data-a="go-tactical">Go to Tactical</button>';
   if(!D){
     if(!s.owner)return'<h2>COMMS</h2><p>'+(s.port?'Port control waves you through: "Welcome to '+esc(s.name)+', Captain. Trade and fuel are open."':'Only static and distant pulsar chirps. Nobody here to hail.')+'</p>'+(s.port?'<button class="btn" data-a="port-rumor">Buy a drink and listen for rumors</button>':'');
+    if(s.co)return'<h2>COMMS</h2><p>A shared world: two peoples answer on this planet\'s channels.</p>'+residents(s).map((o,i)=>'<button class="btn'+(i?'':' pri')+'" data-a="hail" data-v="'+o+'">Hail '+(kn(o).name?'the <b>'+esc(RACE[o].short)+'</b>':'channel '+(i+1))+'</button>').join('');
     return'<h2>COMMS</h2><p>A planetary channel is available'+(kn(s.owner).name?' to the <b>'+esc(RACE[s.owner].name)+'</b>':'')+'.</p><button class="btn pri" data-a="hail">Open hailing frequencies</button>';
   }
-  const rc=RACE[D.rid];let h='<h2>COMMS · '+esc(rc.short.toUpperCase())+'</h2>';
+  const rc=RACE[D.rid];let h='<h2 class="ch">COMMS · '+esc(rc.short.toUpperCase())+'<button class="hlog" data-a="dlgmis">☰</button><button class="hlog" data-a="dlgstat">⚙</button><button class="hlog" data-a="dlglog">▤ Log</button></h2>';
   h+='<div id="chat">'+D.lines.map(l=>l.me?'<div class="bub me">'+(l.tone?'<span class="tone">'+esc(l.tone)+'</span>':'')+esc(l.text)+'</div>':
-    l.who?'<div class="bub them"><span class="who">'+esc(l.who)+'</span>'+esc(l.text)+'</div>':'<div class="bub note">'+esc(l.text)+'</div>').join('')+'</div>';
+    l.who?'<div class="bub them"><span class="who">'+esc(l.who)+'</span>'+esc(trx(l.text))+'</div>':'<div class="bub note">'+esc(l.text)+'</div>').join('')+'</div>';
   if(D.stage==='tone'){SB_TONES.forEach(tn=>{h+='<button class="btn" data-a="tone" data-v="'+tn.id+'"><span class="tone">'+tn.label+'</span>'+esc(tn.line)+'</button>';});}
   else if(false){h+='<p class="small">Reward: '+favorRewardText(D.offer)+' · takes 1 hold slot · no time limit</p><button class="btn pri" data-a="fav-yes">"Happy to help."</button><button class="btn" data-a="fav-no">"Not this time."</button>';}
   else if(D.stage==='special'){rc.special.options.forEach((o,i)=>{h+='<button class="btn" data-a="spec" data-v="'+i+'">'+esc(o.t)+'</button>';});}
@@ -427,13 +527,18 @@ VIEWS.comms=()=>{
     if(!T.region)h+='<button class="btn" data-a="topic" data-v="region">"What news from the region?"</button>';
     if(!T.special)h+='<button class="btn" data-a="topic" data-v="special">"Is there anything we can do for each other?"</button>';
     if(rc.nemesis&&rc.intel&&!T.intel&&kn(rc.nemesis).name)h+='<button class="btn pri" data-a="topic" data-v="intel"><span class="tone">Intel</span>'+esc(rc.intel.ask)+' ('+esc(intelGrade(intelScore(rc.nemesis)-intelSold(D.rid)))+')</button>';
+    if(!G.visit.bribed&&G.credits>=bribeCost(D.rid))h+='<button class="btn" data-a="topic" data-v="bribe">Offer a goodwill payment · ¢'+bribeCost(D.rid)+'</button>';
     const gift=giftable(D.rid);if(gift&&!T.gift)h+='<button class="btn" data-a="topic" data-v="gift">Offer a gift of '+esc(RES[gift].name)+'</button>';
     if(D.offer)h+='<p class="small">Favor reward: '+favorRewardText(D.offer)+' · takes 1 hold slot · no time limit</p><button class="btn pri" data-a="fav-yes"><span class="tone">Favor</span>"Happy to help."</button><button class="btn" data-a="fav-no">"Not this time."</button>';
     favs().filter(f=>f.state==='open').forEach(f=>{const ok=f.to===D.rid,K=FAV_KIND[f.kind];if(f.from===D.rid)return;
       h+='<button class="btn'+(ok?' pri':' warn')+'" data-a="fav-give" data-v="'+f.id+'">'+(ok?'<span class="tone">Favor</span>Deliver the ':'<span class="tone">Off-book</span>Hand over the ')+esc(RACE[f.from].short)+' '+esc(K.item.toLowerCase())+(ok?'':' (meant for the '+esc(RACE[f.to].short)+')')+'</button>';});
-    if(rc.liar&&G.visit.lied&&G.visit.lied[D.rid]&&!T.callout){const pf=lieProof(D.rid);h+='<button class="btn'+(pf?' pri':' warn')+'" data-a="topic" data-v="callout"><span class="tone">'+(pf?'Proof':'Bluff')+'</span>"That\'s a lie, and I can prove it."</button>';}
+    if(rc.liar&&G.visit.lied&&G.visit.lied[D.rid]&&!T.callout&&!contraSource(D.rid)){const pf=lieProof(D.rid);h+='<button class="btn'+(pf?' pri':' warn')+'" data-a="topic" data-v="callout"><span class="tone">'+(pf?'Proof':'Bluff')+'</span>"That\'s a lie, and I can prove it."</button>';}
+    {const la=leverTarget(D.rid);if(la&&!T.leverage)h+='<button class="btn" data-a="topic" data-v="leverage"><span class="tone">Ally</span>"The '+esc(RACE[la].short)+' will vouch for me."</button>';
+     const cs=contraSource(D.rid);if(cs&&!T.callout)h+='<button class="btn pri" data-a="topic" data-v="contradict"><span class="tone">Proof</span>"The '+esc(RACE[cs].short)+' told me otherwise."</button>';
+     const tp=tipTarget(D.rid);if(tp&&!T.tip)h+='<button class="btn" data-a="topic" data-v="tip"><span class="tone">Intel</span>"I know where the '+esc(RACE[tp].short)+' live."</button>';}
     if(!T.press)h+='<button class="btn warn" data-a="topic" data-v="press"><span class="tone">Threat</span>"Hand over your best cargo, or else."</button>';
     h+='<button class="btn pri" data-a="go-trade">Open trade channel</button><button class="btn" data-a="close">Close channel</button>';
+    {const o=residents(here()).find(x=>x!==D.rid);if(o)h+='<button class="btn" data-a="hail" data-v="'+o+'">Switch channel: '+(kn(o).name?esc(RACE[o].short):'other species')+'</button>';}
   }
   return h;
 };
@@ -449,7 +554,7 @@ VIEWS.trade=()=>{
     '<button data-a="buy" data-v="'+it.id+'" '+(it.buy==null||G.credits<it.buy||cargoUsed()>=G.cargoMax?'disabled':'')+'>'+(it.buy==null?'—':'¢'+it.buy)+'</button>'+
     '<button data-a="sell" data-v="'+it.id+'" '+(!have?'disabled':'')+'>'+(it.full?'Full':'¢'+it.sell)+'</button></div>';});
   if(favorCount())h+=cargoTable();
-  if(m.items.some(x=>x.full))h+='<p class="small">'+esc(FULL_LINE[here().owner]||'')+'</p>';
+  if(m.items.some(x=>x.full))h+='<p class="small">'+esc(FULL_LINE[act(here())]||'')+'</p>';
   h+='<p class="small">Wanted goods fetch less as a market fills up; demand recovers a little with every warp jump.</p>';
   return h;
 };
@@ -458,60 +563,98 @@ VIEWS.tactical=()=>{
   const E=G.enc;let h='<h2>TACTICAL</h2>';
   if(!E)return h+'<p>Shields up, weapons cold. No threats on sensors.</p><p class="small">Your ship outclasses anything in this sector. When hostiles appear, how you handle them is a political choice: other races are watching.</p>';
   const who=RACE[E.race]?RACE[E.race].name:SB_PIRATES.short;
-  if(E.state==='active'){
-    h+='<p><b>'+esc(E.name)+'</b> ('+esc(who)+') has locked weapons on you. Their weapons can\'t breach your shields.</p>';
-    h+='<button class="btn" data-a="tac" data-v="scare"><span class="tone">Firm</span>Hail: "Stand down and leave. Now."</button>';
+  if(E.state==='active'&&E.race==='glb'){
+    h+='<p><b>'+esc(E.name)+'</b> (Glubbari) is firing at you. Each shot is roughly a penny thrown at a mountain. Shields: unbothered.</p><div class="say">"SURRENDER, LAND-BLOB! BOW BEFORE THE BOWL!"</div>';
+    h+='<button class="btn" data-a="tac" data-v="brush"><span class="tone">Gentle</span>Nudge them aside with a tractor beam</button>';
+    h+='<button class="btn" data-a="tac" data-v="swat"><span class="tone">Swat</span>Flick them away with a shield pulse</button>';
+    h+='<button class="btn" data-a="tac" data-v="ignore"><span class="tone">Calm</span>Ignore them and sip your tea</button>';
+  } else if(E.state==='active'){
+    h+='<p><b>'+esc(E.name)+'</b> ('+esc(who)+') is posturing nearby. Their weapons can\'t breach your shields.</p>';
+    h+='<button class="btn" data-a="tac" data-v="scare"><span class="tone">Firm</span>Hail: "Please move along, friends."</button>';
     h+='<button class="btn warn" data-a="tac" data-v="loot"><span class="tone">Bully</span>Disable their engines and loot the hold</button>';
     h+='<button class="btn" data-a="tac" data-v="spare"><span class="tone">Mercy</span>Disable their weapons, then spare them</button>';
     h+='<button class="btn" data-a="tac" data-v="ignore"><span class="tone">Calm</span>Ignore them and hold position</button>';
-  } else h+='<p>'+esc(E.result||'')+'</p><button class="btn pri" data-a="tac-done">Stand down from alert</button>';
+  } else h+='<p>'+esc(E.result||'')+'</p><button class="btn pri" data-a="tac-done">Carry on</button>';
   return h;
 };
 VIEWS.log=()=>{
   let h='<h2>COMPUTER LOG</h2>';
   if(V.logSel)return h+logEntry(V.logSel);
-  h+=favorsHtml();
-  const ids=SB_RACES.map(r=>r.id).filter(id=>G.kn[id]);
-  if(!ids.length)h+='<p class="small">No species on record yet. Hail, scan, and listen for rumors to fill the log.</p>';
-  ids.forEach(id=>{const k=kn(id),rc=RACE[id];h+='<button class="lr" data-a="logsel" data-v="'+id+'">'+(k.portrait?'<img src="'+rc.img+'" alt="">':'<span class="pt">?</span>')+
-    '<div><strong>'+esc(raceName(id))+'</strong>'+(k.portrait?esc(rc.kind):'<span class="unk">No visual contact</span>')+'<br>Reputation: '+(k.portrait?repLabel(G.races[id].rep)+' ('+Math.round(G.races[id].rep)+')':'<span class="unk">Unknown</span>')+'</div></button>';});
-  const unk=SB_RACES.length-ids.length;
-  if(unk>0)h+='<p class="small">'+unk+' more signal source'+(unk>1?'s':'')+' detected but uncharted.</p>';
+  if(V.logFrom)h+='<button class="btn pri" data-a="logret">‹ Back to conversation</button>';
+  h+='<div class="cxh">YOUR PROFILE</div><p class="small"><b>Envoy of the Terran Concord</b> · humans of Earth · Turn '+G.turn+' · ¢'+G.credits+' · Hull '+(G.hull==null?100:G.hull)+'%'+(G.miles&&Object.keys(G.miles).length?' · Title: '+MILES.filter(m=>G.miles[m[0]]).pop()[2]:'')+'</p>';
+  h+=questsHtml();
+  const n=foundCount(),T=SB_RACES.length;G.miles=G.miles||{};
+  h+='<div class="cxh">COMPENDIUM · Found '+n+'/'+T+'</div><div class="mbar"><i style="width:'+(n*100/T).toFixed(1)+'%"></i></div><p class="small">Milestones: '+MILES.map(([m,cr,t])=>(G.miles[m]?'✓ ':'')+m+' (¢'+cr+')').join(' · ')+'</p>';
+  const ord=SB_RACES.map(r=>r.id).sort((a,b)=>{const g=x=>kn(x).portrait?0:G.kn[x]?1:2;return g(a)-g(b);});
+  ord.forEach(id=>{const k=G.kn[id]?kn(id):{},rc=RACE[id];
+    if(k.portrait){const hm=homeOf(id),kl=k.loc&&!k.loc.r;h+='<div class="lrw"><button class="lr" data-a="logsel" data-v="'+id+'"><img src="'+rc.img+'" alt=""><div><strong>'+esc(raceName(id))+'</strong>'+esc(rc.kind)+'<br>'+cap(tier(id))+' ('+Math.round(G.races[id].rep)+') · Home: '+(kl?esc(hm.name)+(hm.co?' (shared)':''):'???')+'</div></button>'+(kl?'<button class="cx mapgo" data-a="mapgo" data-v="'+hm.id+'">◎ Map</button>':'')+'</div>';}
+    else if(G.kn[id]&&(k.name||k.loc)){const src=(G.rsrc&&G.rsrc[id])||'Unknown source';h+='<button class="lr rum" data-a="logsel" data-v="'+id+'"><span class="pt sil">?</span><div><strong>'+(k.name?esc(raceName(id)):'Unnamed signal')+' <span class="tag">Rumored</span></strong>Source: '+esc(src)+'<br>Location hint: '+(k.loc?esc(k.loc.v)+(k.loc.r?' (unconfirmed)':''):'somewhere in the dark')+'</div></button>';}
+    else h+='<div class="lr unk0"><span class="pt sil">?</span><div><strong>???</strong><span class="unk">Undiscovered species</span></div></div>';});
   return h;
 };
+const UNK='<span class="unk">???</span>';
+function spark(vals,w,h,col){if(vals.length<2)return'';const mn=Math.min(...vals),mx=Math.max(...vals),r=mx-mn||1;
+  const pts=vals.map((v,i)=>(i*(w-4)/(vals.length-1)+2).toFixed(1)+','+(h-2-(v-mn)*(h-4)/r).toFixed(1)).join(' ');
+  return'<svg class="spk" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><polyline fill="none" stroke="'+(col||'#7fd0ff')+'" stroke-width="1.6" points="'+pts+'"/></svg>';}
+function relRows(id,f){const k=kn(id)[f];if(!k)return UNK;if(!k.v.length)return'<span class="small">None known</span>'+(k.r?'<span class="tag">rumored</span>':'');
+  return k.v.map(x=>{const kx=kn(x);const nm=kx.name?RACE[x].short:'???';const rp=kx.portrait?tier(x)+' '+Math.round(G.races[x].rep):'???';
+    return'<button class="cx" data-a="logsel" data-v="'+x+'"><b>'+esc(nm)+'</b><span>'+esc(rp)+'</span></button>';}).join('')+(k.r?'<span class="tag">rumored</span>':'');}
+function loreRows(id){const rc=RACE[id],k=kn(id),m=(G.mem||{})[id]||{},home=homeOf(id),T=(G.trades||{})[id]||[];
+  const L=[['Leader',rc.speaker,!!k.portrait],['Nature',rc.kind,!!k.portrait],['Temperament',rc.hint,m.n>=1],
+    ['Voice',{sly:'Silver-tongued; may bend the truth.',martial:'Blunt; respects strength.',gentle:'Soft-spoken; feels harm deeply.',formal:'Measured and protocol-minded.'}[voice(rc)],m.n>=2||!!(k.allies&&!k.allies.r)],
+    ['Known ships',(rc.ships||[]).join(', '),!!(G.hist[id]||[]).some(x=>/ship/.test(x))||home.scan>=2],
+    ['Sworn rival',rc.nemesis&&RACE[rc.nemesis]?RACE[rc.nemesis].short:'None',!!(rc.nemesis&&(k.enemies||G.intelSold&&G.intelSold[id]!=null))||(!rc.nemesis&&!!k.enemies)],
+    ['Honesty',rc.liar?'Known to lie to outsiders.':'No record of deceit.',!!m.caught||(G.notes&&(G.notes[id]||[]).length>=2)],
+    ['Commerce',T.length?T.length+' trade entries on file.':'',T.length>0]];
+  return L.map(([a,b,ok])=>'<b>'+a+'</b><span>'+(ok&&b?esc(b):UNK)+'</span>').join('');}
 function logEntry(id){
   const k=kn(id),rc=RACE[id],st=G.races[id];
-  let h='<button class="btn" data-a="logback">‹ All species</button>';
+  let h=(V.logFrom?'<button class="btn pri" data-a="logret">‹ Back to conversation</button>':'')+'<button class="btn" data-a="logback">‹ All species</button>';
   h+=k.portrait?'<img class="big" src="'+rc.img+'" alt="'+esc(rc.short)+'">':'<div class="pt" style="width:100%;height:120px">?</div>';
   h+='<h2 style="margin-top:8px">'+esc(raceName(id))+'</h2>';
-  h+='<div class="kv">';
-  h+='<b>Species</b><span>'+(k.portrait?esc(rc.kind):'<span class="unk">Unknown</span>')+'</span>';
-  h+='<b>Personality</b><span>'+(k.portrait?esc(rc.hint):'<span class="unk">Unknown</span>')+'</span>';
-  h+='<b>'+(rc.nomad?'Last seen':'Homeworld')+'</b><span>'+fieldHtml(id,'loc',v=>v)+'</span>';
+  // reputation
+  const RL=(G.repLog||{})[id]||[];
+  h+='<h3 class="cxh">REPUTATION</h3><div class="kv"><b>Standing</b><span>'+(k.portrait?cap(tier(id))+' ('+Math.round(st.rep)+')':UNK)+'</span>';
+  h+='<b>History</b><span>'+(k.portrait&&RL.length?spark(RL.map(x=>x[1]),150,28,'#ffcf6a')+'<br><span class="small">'+RL.slice(-6).map(x=>'T'+x[0]+': '+x[1]).join(' · ')+'</span>':UNK)+'</span></div>';
+  // home
+  const hs=homeOf(id),co=hs.owner===id?hs.co:hs.owner;
+  h+='<h3 class="cxh">HOME</h3><div class="kv"><b>'+(rc.nomad?'Last seen':'Homeworld')+'</b><span>'+(kn(id).loc?fieldHtml(id,'loc',v=>v):UNK)+'</span>';
+  h+='<b>Shares it with</b><span>'+(co?(kn(id).loc&&!kn(id).loc.r?'<button class="cx" data-a="logsel" data-v="'+co+'"><b>'+esc(kn(co).name?RACE[co].short:'???')+'</b><span>'+(kn(co).portrait?tier(co)+' '+Math.round(G.races[co].rep):'???')+'</span></button>':UNK):(kn(id).loc?'No one':UNK))+'</span></div>';
+  // facts
+  h+='<h3 class="cxh">FACTS</h3><div class="kv">';
   h+='<b>Tech level</b><span>'+fieldHtml(id,'tech',v=>TECH_NAMES[v]+' ('+v+'/5), '+techCompare(v))+'</span>';
   h+='<b>Wants</b><span>'+fieldHtml(id,'wants',resList)+'</span>';
   h+='<b>Planet has</b><span>'+fieldHtml(id,'rich',resList)+'</span>';
   h+='<b>Hidden want</b><span>'+fieldHtml(id,'secret',v=>RES[v].icon+' '+RES[v].name)+'</span>';
-  h+='<b>Taboo good</b><span>'+fieldHtml(id,'taboo',v=>RES[v].icon+' '+RES[v].name)+'</span>';
-  h+='<b>Reputation</b><span>'+(k.portrait?repLabel(st.rep)+' ('+Math.round(st.rep)+')':'<span class="unk">Unknown</span>')+'</span>';
-  h+='<b>Allies</b><span>'+fieldHtml(id,'allies',raceList)+'</span>';
-  h+='<b>At war with</b><span>'+fieldHtml(id,'enemies',raceList)+'</span>';
-  h+='</div><h2>DEALINGS</h2>';
+  h+='<b>Taboo good</b><span>'+fieldHtml(id,'taboo',v=>RES[v].icon+' '+RES[v].name)+'</span></div>';
+  h+='<h3 class="cxh">LORE</h3><div class="kv">'+loreRows(id)+'</div>';
+  h+='<h3 class="cxh">ALLIES</h3><div class="cxl">'+relRows(id,'allies')+'</div><h3 class="cxh">ENEMIES</h3><div class="cxl">'+relRows(id,'enemies')+'</div>';
+  // notes
+  const N=(G.notes||{})[id]||[];
+  h+='<h3 class="cxh">KEY NOTES</h3>'+(N.length?N.slice().reverse().map(n=>'<div class="hist'+(n.bad?' bad':'')+'">T'+n.t+': '+esc(n.text)+'<br><span class="small">Source: '+esc(n.src||'?')+(n.bad?' · <b class="lie">DISPROVEN</b> by '+esc(n.by):n.claim?' · unverified':'')+'</span></div>').join(''):'<p class="small">???</p>');
+  // trades
+  const T=(G.trades||{})[id]||[];
+  h+='<h3 class="cxh">TRADES</h3>';
+  if(!T.length)h+='<p class="small">???</p>';
+  else{const goods={};T.forEach(t=>{(goods[t.id]=goods[t.id]||[]).push(t);});
+    h+='<table class="cxt"><tr><th>Good</th><th>Prices</th><th>Trend</th></tr>'+Object.entries(goods).map(([g,a])=>'<tr><td>'+RES[g].icon+' '+esc(RES[g].name)+'</td><td>'+a.slice(-4).map(t=>(t.k==='buy'?'B':'S')+t.p).join(' ')+'</td><td>'+spark(a.map(t=>t.p),60,18)+'</td></tr>').join('')+'</table>';
+    h+='<table class="cxt"><tr><th>Turn</th><th>Deal</th><th>Qty</th><th>Price</th></tr>'+T.slice(-30).reverse().map(t=>'<tr><td>T'+t.t+'</td><td>'+(t.k==='buy'?'Bought ':'Sold ')+esc(RES[t.id].name)+'</td><td>'+t.q+'</td><td>¢'+t.p+'</td></tr>').join('')+'</table>';}
+  h+='<h3 class="cxh">DEALINGS</h3>';
   const H=G.hist[id]||[];h+=H.length?H.slice().reverse().map(x=>'<div class="hist">'+esc(x)+'</div>').join(''):'<p class="small">No dealings yet.</p>';
   return h;
 }
 const cap=s=>s[0].toUpperCase()+s.slice(1);
 function techCompare(v){const known=SB_RACES.map(r=>kn(r.id).tech).filter(Boolean).map(x=>x.v);const avg=known.length?known.reduce((a,b)=>a+b,0)/known.length:3;
   return v>avg+.4?'more advanced than most known races':v<avg-.4?'less advanced than most known races':'about average among known races';}
-function sysLabel(s){if(s.port)return'Free port';if(s.owner){const k=kn(s.owner).loc;if(k&&k.v===s.name)return RACE[s.owner].short+' homeworld'+(k.r?' (rumored)':'');}
+function sysLabel(s){if(s.port)return'Free port';if(s.owner){const k=kn(s.owner).loc;if(k&&k.v===s.name)return (s.co&&kn(s.co).loc&&!kn(s.co).loc.r?RACE[s.owner].short+' & '+RACE[s.co].short+' shared world':RACE[s.owner].short+' homeworld'+(k.r?' (rumored)':''));}
   const rum=SB_RACES.find(r=>{const k=kn(r.id).loc;return k&&k.r&&k.v===s.name;});if(rum)return rum.short+' homeworld (rumored)';
   return s.scan?(s.owner?'Inhabited':'Uninhabited'):'Unexplored';}
 
 /* ---------------- helm ---------------- */
 function dist(a,b){return Math.hypot(sys(a).x-sys(b).x,sys(a).y-sys(b).y);}
-function fuelCost(d){return Math.max(4,Math.round(d*38));}
+function fuelCost(d){return Math.max(4,Math.round(d*42*(G&&G.up&&G.up.engines?.75:1)*(G&&G.hull!=null&&G.hull<50?1.15:1)));}
 function drawMap(){
-  const c=$('map');if(!c)return;const w=c.clientWidth,h=Math.round(w*2.3);c.style.height=h+'px';c.width=w*DPR;c.height=h*DPR;const x=c.getContext('2d');x.setTransform(DPR,0,0,DPR,0,0);
+  const c=$('map');if(!c)return;const w=c.clientWidth,h=Math.round(w*Math.max(2.3,Math.ceil(G.systems.length/3)*.165));c.style.height=h+'px';c.width=w*DPR;c.height=h*DPR;const x=c.getContext('2d');x.setTransform(DPR,0,0,DPR,0,0);
   x.fillStyle='#040814';x.fillRect(0,0,w,h);x.strokeStyle='#10203d';for(let i=1;i<8;i++){x.beginPath();x.moveTo(i*w/8,0);x.lineTo(i*w/8,h);x.stroke();x.beginPath();x.moveTo(0,i*h/8);x.lineTo(w,i*h/8);x.stroke();}
   const P=s=>[12+s.x*(w-24),12+s.y*(h-24)];
   const cur=P(here());
@@ -535,59 +678,153 @@ function drawMap(){
     if(best!=null){V.sel=best;sfx('tap');renderAll();setTimeout(()=>{const b=document.querySelector('[data-a=warp],[data-a=limp]');if(b)b.scrollIntoView({behavior:'smooth',block:'center'});},50);}};
 }
 function warpTo(id,limp){
-  const d=dist(G.loc,id);G.fuel=Math.max(0,G.fuel-(limp?G.fuel:fuelCost(d)));G.loc=id;G.turn++;V.sel=null;V.dlg=null;G.visit={id:G.turn,topics:{},tradeRep:0};V.lastScan=null;nomadDrift();
-  V.warpT=performance.now()+1300;sfx('warp');V.view='helm';renderAll();
-  setTimeout(arrive,1300);
+  G.prevLoc=G.loc;
+  const d=dist(G.loc,id);G.fuel=Math.max(0,G.fuel-(limp?G.fuel:fuelCost(d)));G.loc=id;G.turn++;V.sel=null;V.dlg=null;G.visit={id:G.turn,topics:{},tradeRep:0};V.lastScan=null;nomadDrift();processGossip();
+  lifeTick();V.warpT=performance.now()+1300;sfx('warp');V.view='helm';renderAll();
+  setTimeout(()=>{arrive();if(V.towPending||(!here().port&&G.fuel<4)){const w=V.towPending||'tanks empty';V.towPending=null;friendlyTow(w);commit();}},1300);
 }
 function arrive(){
-  const s=here();
+  let s=here();
+  if(s.owner==='kth'&&!((G.q||{}).firstlight&&G.q.firstlight.done)&&!G.translate){damage(5,'Kthrax swarm warning');if(G.prevLoc!=null)G.loc=G.prevLoc;toast('Danger zone: the Kthrax swarm drives you back. You retreat safely. (Their patterns can be learned from the Hoothvale.)','b');s=here();renderAll();return;}
+  if(s.port&&G.credits>=DOCK_FEE&&s.name!=='Haven Station'){G.credits-=DOCK_FEE;toast('Docking fee: ¢'+DOCK_FEE+'.');}
+  if(!s.port&&Math.random()<(V.forceHazard?1:.15))damage(3+Math.floor(Math.random()*5),pick(Math.random,['micrometeor storm','ion squall','gravity shear','debris field']));
+  if(s.port)G.morale=Math.min(100,(G.morale==null?80:G.morale)+10);
   if(s.port){if(G.fuel<G.fuelMax){G.fuel=G.fuelMax;toast('Port tenders top up your fuel. No charge.','g');}}
   if(s.owner&&kn(s.owner).loc&&kn(s.owner).loc.r){ if(kn(s.owner).loc.v===s.name)toast('Rumor confirmed: '+RACE[s.owner].short+' homeworld.','g'); }
-  SB_RACES.forEach(r=>{const k=kn(r.id).loc;if(k&&k.r&&k.v===s.name&&s.owner!==r.id){delete kn(r.id).loc;toast('Rumor about the '+r.short+' homeworld proved false.','b');}});
+  SB_RACES.forEach(r=>{const k=kn(r.id).loc;if(k&&k.r&&k.v===s.name&&!residents(s).includes(r.id)){delete kn(r.id).loc;toast('Rumor about the '+r.short+' homeworld proved false.','b');}});
   if(s.owner&&(kn(s.owner).loc||s.scan))know(s.owner,'loc');
   if(!s.port&&Math.random()<.3)spawnEncounter();
   commit();
 }
 function spawnEncounter(forceRace){
-  const pool=SB_RACES.filter(r=>G.races[r.id].rep<30&&!r.neverHostile);const race=forceRace||(Math.random()<.4||!pool.length?'pir':pick(Math.random,pool).id);
+  if(!forceRace&&G.escort>0){G.escort--;toast('Lanewarden escort: lane cleared. ('+G.escort+' escorts left)','g');return;}
+  const pool=SB_RACES.filter(r=>G.races[r.id].rep<30&&!r.neverHostile&&r.id!=='glb');const race=forceRace||(RACE.glb&&Math.random()<.4?'glb':Math.random()<.35||!pool.length?'pir':pick(Math.random,pool).id);
   const src=RACE[race]||SB_PIRATES;G.enc={race,name:pick(Math.random,src.ships),state:'active'};
   if(RACE[race])meet(race);
-  V.view='tactical';V.dlg=null;sfx('alert');toast('Red alert: the '+G.enc.name+' is closing in.','b');
+  V.view='tactical';V.dlg=null;sfx('alert');toast(race==='glb'?'A tiny bowl-ship, the '+G.enc.name+', is "attacking" you. Adorably.':'Heads up: the '+G.enc.name+' is approaching.');
 }
 
 /* ---------------- science ---------------- */
 function scan(level){
   const s=here();V.scanUntil=performance.now()+1500;sfx('scan');const out=[];
-  if(level===1){s.scan=1;if(s.owner){know(s.owner,'name');know(s.owner,'loc');know(s.owner,'tech');know(s.owner,'rich');out.push('Identified the '+RACE[s.owner].name+'.');toast('Log updated: '+RACE[s.owner].short,'g');}
+  if(level===1){s.scan=1;if(s.co){know(s.co,'name');know(s.co,'loc');know(s.co,'tech');out.push('Also detected: the '+RACE[s.co].name+'.');}if(s.owner){know(s.owner,'name');know(s.owner,'loc');know(s.owner,'tech');know(s.owner,'rich');out.push('Identified the '+RACE[s.owner].name+'.');toast('Log updated: '+RACE[s.owner].short,'g');}
   } else {
-    G.fuel=Math.max(0,G.fuel-3);s.scan=2;
+    const sc=G.up&&G.up.scanner?SCAN_CR/2:SCAN_CR;if(G.credits<sc){toast('Deep scan needs ¢'+sc+' for probe drones.','b');return;}
+    G.fuel=Math.max(0,G.fuel-3);G.credits-=sc;s.scan=2;V.src='Deep scan of '+s.name;
+    if(s.owner){const o=act(s),st=G.races[o];(G.stock=G.stock||{})[o]=G.turn;
+      const W=['shield pylons','orbital lances','drone swarms','mine fields','ion batteries'][st.tech%5],P=['a cooling vent on the north pole','an unshielded supply lane','a sensor blind spot at dawn','an aging reactor'][(o.charCodeAt(0)+o.charCodeAt(1))%4];
+      out.push('True stock: '+RES[homeOf(o).rich[0]].name+' warehouses are overfull; your prices here improve 8%.');
+      out.push('Defenses: '+W+'. Weak point: '+P+'.');note(o,'Defenses: '+W+'; weak point: '+P+'.','scan');
+      const lf=(RACE[o].lore||RACE[o].hint||'');if(lf)note(o,'Archive fragment: '+String(lf).split('. ')[0].slice(0,140)+'.','scan');
+      if(Math.random()<(V.forceDistress?1:.25)&&!s.distress){s.distress=1;const c=60+Math.floor(Math.random()*61);G.credits+=c;addRep(o,4,'rescued crew');hist(o,'You answered a distress beacon and rescued a crew.');out.push('Distress signal! A stranded '+RACE[o].short+' shuttle. You pull the crew aboard: +¢'+c+', and they will not forget it.');}
+      if(o==='ost'){G.flags=G.flags||{};if(!G.flags.ostEv){G.flags.ostEv=1;out.push('Thermal trace: rows of sealed "staff dormitories" behind the salons, locked from outside. Hundreds of life-signs. These are holding pens.');note('ost','Deep scan found hidden holding pens behind the estates.','scan');}}
+      if(o==='lmn'){G.flags=G.flags||{};if(!G.flags.lumEv){G.flags.lumEv=1;out.push('Signal analysis: the Luminae weave a soft persuasion field into every broadcast. Their offers will now show true terms.');note('lmn','Scan revealed a persuasion field: their deals carry hidden costs.','scan');}}
+      qEvent('scan',o).forEach(t=>out.push(t));if(s.co)qEvent('scan',s.co).forEach(t=>out.push(t));}
     if(s.owner){know(s.owner,'secret');know(s.owner,'taboo');const f=pick(Math.random,['allies','enemies']);know(s.owner,f);
       out.push('Decrypted trade manifests: the '+RACE[s.owner].short+' quietly crave '+RES[RACE[s.owner].secretWant].name+'.');
       out.push('Cultural archive: they consider '+RES[RACE[s.owner].taboo].name+' taboo.');
       out.push('Military traffic shows they '+describe(s.owner,f,truth(s.owner,f))+'.');}
     else if(s.derelict&&!s.looted){s.looted=true;const q=2+Math.floor(Math.random()*3);addCargo('relics',q);out.push('Found a derelict hulk. Salvaged '+q+' Ancient Relics.');}
+    else if(!s.owner&&!s.port){out.push(pick(Math.random,['Ruins of an outpost. A cracked beacon still loops its last log.','Old survey buoys. Their data cores are still readable.','A crashed courier. Its nav log lists recent stops.','Abandoned mining rigs. Graffiti marks who passed through.']));}
     else out.push('Subspace echoes only. No hidden structures.');
+    if(s.co){const c=s.co;know(c,'secret');know(c,'taboo');out.push('A second signal: the '+RACE[c].short+' share this world and quietly crave '+RES[RACE[c].secretWant].name+'.');}
     out.push(rumor(s.owner));
+    if(s.owner||(G.up&&G.up.scanner)){const t=pick(Math.random,SB_RACES.filter(x=>!kn(x.id).loc&&!kn(x.id).portrait));if(t&&(!s.owner||Math.random()<.5)){know(t.id,'name',true);know(t.id,'loc',undefined,true);out.push('Faint coordinates: something called the "'+t.short+'" near '+homeOf(t.id).name+'.');}}
+    if(!s.owner&&!s.port){if(!s.derelict&&!s.salv){s.salv=1;const id=pick(Math.random,['alloy','circuits','data','isotope']),q=addCargo(id,1+Math.floor(Math.random()*2));if(q)out.push('Salvage: '+q+' '+RES[id].name+' from the wreckage.');}
+      const t=pick(Math.random,SB_RACES.filter(x=>!kn(x.id).loc));if(t){know(t.id,'loc');out.push('Recovered star charts: the '+t.short+' homeworld is '+homeOf(t.id).name+'.');}}
   }
   V.lastScan=out;commit();
 }
 function addCargo(id,q){const room=G.cargoMax-cargoUsed();q=Math.min(q,room);if(q>0)G.cargo[id]=(G.cargo[id]||0)+q;return q;}
 
+/* ---------------- v2.1 living dialogue ---------------- */
+const TIERS=['hostile','wary','neutral','friendly','trusted'];
+function tier(rid){const r=G.races[rid].rep;return r<=-40?'hostile':r<-10?'wary':r<15?'neutral':r<40?'friendly':'trusted';}
+function voice(rc){return rc.liar?'sly':rc.respectsStrength>=.6?'martial':(rc.empath||(rc.hatesBullies>=.7&&rc.respectsStrength<.3))?'gentle':'formal';}
+function tget(o,rid,sub){if(o==null)return null;if(typeof o==='string'||Array.isArray(o))return o;return sub&&o[sub]!=null?o[sub]:null;}
+function tline(rid,key,vars,sub){const rc=RACE[rid],hk=(rc.talk||(typeof SB_TALK_HOOKS!=='undefined'&&SB_TALK_HOOKS[rid])||{})[key];
+  let t=hk!=null?tget(hk,rid,sub):null;
+  if(t==null){const T=SB_TALK[key];if(!T)return'';let v=(sub&&T[sub]&&typeof T[sub]==='object'&&!Array.isArray(T[sub])&&!T[voice(rc)])?T[sub]:(T[voice(rc)]||T.formal);if(v===T[sub]){v=v[voice(rc)]||v.formal;sub=null;}if(sub&&v&&typeof v==='object'&&!Array.isArray(v))v=v[sub];t=v;}
+  if(Array.isArray(t))t=pick(Math.random,t);vars=vars||{};
+  return t?String(t).replace(/\{(\w+)\}/g,(_,k)=>vars[k]!=null?vars[k]:''):'';}
+function xv(x,extra){return Object.assign({X:RACE[x].short,XL:RACE[x].speaker},extra||{});}
+function mem(rid){const M=G.mem=G.mem||{};return M[rid]=M[rid]||{n:0};}
+function greetFor(rid){const rc=RACE[rid],t=tier(rid);
+  if(t==='hostile'||t==='trusted')return tline(rid,'greet',{},t)||(t==='trusted'?rc.greet.hi:rc.greet.lo);
+  return t==='friendly'?rc.greet.hi:t==='wary'?rc.greet.lo:rc.greet.mid;}
+function metRaces(rid){return SB_RACES.filter(o=>o.id!==rid&&G.kn[o.id]&&G.kn[o.id].portrait&&(G.hist[o.id]||[]).length).map(o=>o.id);}
+// up to 3 reactive lines: gossip heard, memory of you, your ties to their friends/foes, who else you've met
+function reactLines(rid){const out=[],m=mem(rid),H=(G.heard=G.heard||{});
+  if(H[rid]&&H[rid].length){const g=H[rid].shift();out.push(tline(rid,g.good?'gossipGood':'gossip',xv(g.v,{deed:SB_DEEDS[g.k]||g.k})));}
+  if(m.n>0){const k=m.caught?'caught':m.extorted?'extorted':m.gift?'gift':m.tone==='threat'?'threat':'warm';out.push(tline(rid,'memory',{n:m.n+1},k));}
+  const en=truth(rid,'enemies').filter(x=>G.races[x].rep>=30&&kn(x).portrait),al=truth(rid,'allies').filter(x=>G.races[x].rep>=30&&kn(x).portrait);
+  const V0=G.visit.cozy=G.visit.cozy||{};
+  if(en.length){out.push(tline(rid,'enemyCozy',xv(en[0])));if(!V0[rid]){V0[rid]=1;addRep(rid,-2,'cozy with the '+RACE[en[0]].short);}}
+  else if(al.length){out.push(tline(rid,'allyCozy',xv(al[0])));if(!V0[rid]){V0[rid]=1;addRep(rid,2,'friend of the '+RACE[al[0]].short);}}
+  else{const met=metRaces(rid);if(met.length){const e=met.find(x=>relOf(rid,x)===-1),a=met.find(x=>relOf(rid,x)===1);
+    out.push(e?tline(rid,'metEnemy',xv(e)):a?tline(rid,'metAlly',xv(a)):tline(rid,'metOther',xv(met[met.length-1])));}}
+  if(rid!=='glb'&&RACE.glb&&G.kn.glb&&G.kn.glb.portrait&&typeof SB_GLUB_MOCK!=='undefined'&&out.length<3&&(V.forceMock||Math.random()<.25)){const M=SB_GLUB_MOCK[voice(RACE[rid])]||SB_GLUB_MOCK.formal;out.push(pick(Math.random,M));}
+  return out.filter(Boolean).slice(0,3);}
+// gossip: deeds reach the victim's allies a few turns later
+function gossip(victim,kind,good){if(!RACE[victim])return;(G.gossip=G.gossip||[]).push({v:victim,k:kind,good:!!good,t:G.turn+3});}
+function processGossip(){const Q=G.gossip||[];const keep=[];
+  Q.forEach(g=>{if(G.turn<g.t){keep.push(g);return;}
+    truth(g.v,'allies').forEach(a=>{(G.heard=G.heard||{})[a]=(G.heard[a]||[]).concat({v:g.v,k:g.k,good:g.good});
+      addRep(a,g.good?2:-2,(g.good?'heard you ':'heard you ')+(SB_DEEDS[g.k]||g.k)+' the '+RACE[g.v].short,true);
+      hist(a,'Gossip reached them: you '+(SB_DEEDS[g.k]||g.k)+' the '+RACE[g.v].short+'.');
+      note(a,'Heard via gossip that you '+(SB_DEEDS[g.k]||g.k)+' the '+RACE[g.v].short+'.',RACE[g.v].short+' allies');});});
+  G.gossip=keep;}
+// leverage: name an ally you believe they have
+function leverTarget(rid){const k=kn(rid).allies;const list=k?k.v:[];return list.find(a=>RACE[a]&&G.races[a].rep>=25&&kn(a).portrait)||null;}
+function leverage(rid){const a=leverTarget(rid);if(!a)return;me('"The '+RACE[a].short+' will vouch for me."');
+  if(relOf(rid,a)===1){addRep(rid,6,'vouched for by the '+RACE[a].short);say(tline(rid,'leverOk',xv(a)));hist(rid,'Leveraged your friendship with the '+RACE[a].short+' (+6).');}
+  else{addRep(rid,-4,'false claim of friendship');say(tline(rid,'leverBad',xv(a)));hist(rid,'Claimed the '+RACE[a].short+' as their ally. They are not (-4).');
+    const k=kn(rid).allies;if(k&&k.r){delete kn(rid).allies;know(rid,'allies');}}}
+// contradiction check: a confirmed statement from another race contradicts this race's claim
+function contraSource(rid){if(!(G.visit.lied&&G.visit.lied[rid]))return null;const ka=kn(rid).allies,ke=kn(rid).enemies;
+  return SB_RACES.map(o=>o.id).find(o=>{if(o===rid)return false;const k=kn(o);
+    return (k.enemies&&!k.enemies.r&&k.enemies.v.includes(rid)&&ka&&ka.v.includes(o))||(k.allies&&!k.allies.r&&k.allies.v.includes(rid)&&ke&&ke.v.includes(o));})||null;}
+function contradict(rid){const s=contraSource(rid),rc=RACE[rid];if(!s)return;me('"The '+RACE[s].short+' told me otherwise."','Proof');
+  addRep(rid,rc.liar?rc.liar.caught[0]:2,'caught in a contradiction');say(tline(rid,'contraOk',xv(s)));
+  disprove(rid,RACE[s].short);['wants','allies','enemies'].forEach(f=>{const k=kn(rid)[f];if(k&&k.r)delete kn(rid)[f];know(rid,f);});
+  say('"We '+describe(rid,'allies',truth(rid,'allies'))+'; we '+describe(rid,'enemies',truth(rid,'enemies'))+'."');mem(rid).caught=1;G.visit.topics.callout=1;
+  hist(rid,'Exposed a lie using what the '+RACE[s].short+' told you.');sfx('ok');}
+// tip: a confirmed homeworld of one of their enemies is worth something
+function tipTarget(rid){const T=G.tips=G.tips||{};return truth(rid,'enemies').find(e=>kn(e).loc&&!kn(e).loc.r&&!T[rid+e]&&kn(rid).enemies&&kn(rid).enemies.v.includes(e))||null;}
+function tip(rid){const e=tipTarget(rid);if(!e)return;G.tips[rid+e]=1;const where=homeOf(e).name;me('"I know where the '+RACE[e].short+' make their home."','Intel');
+  G.credits+=40;addRep(rid,3,'useful intel');say(tline(rid,'tip',xv(e,{where})));V.dlg.lines.push({who:'',text:'+¢40 for the location of the '+RACE[e].short+'.'});
+  hist(rid,'Told them where the '+RACE[e].short+' live (+¢40).');hist(e,'You gave their homeworld location to the '+RACE[rid].short+'.');gossip(e,'sold');sfx('coin');}
+/* ---------------- v2.1 codex records ---------------- */
+function note(rid,text,src,claim){const N=(G.notes=G.notes||{})[rid]=(G.notes[rid]||[]);N.push({t:G.turn,text,src:src||'',claim:claim||null});if(/\b(want|wants|need|needs|crave|craves|looking for|seek|seeks)\b/i.test(text))addLead(rid,text);if(N.length>40)N.shift();}
+function disprove(rid,by){(G.notes&&G.notes[rid]||[]).forEach(n=>{if(n.claim&&!n.bad){n.bad=1;n.by=by||'proof';}});}
+function repLog(rid){const L=(G.repLog=G.repLog||{})[rid]=(G.repLog[rid]||[]);const r=Math.round(G.races[rid].rep);if(L.length&&L[L.length-1][0]===G.turn)L[L.length-1][1]=r;else L.push([G.turn,r]);if(L.length>60)L.shift();}
+function tradeLog(rid,kind,id,price){(G.trades=G.trades||{})[rid]=(G.trades[rid]||[]);const T=G.trades[rid],l=T[T.length-1];
+  if(l&&l.t===G.turn&&l.k===kind&&l.id===id&&l.p===price)l.q++;else T.push({t:G.turn,k:kind,id,q:1,p:price});if(T.length>200)T.shift();}
 /* ---------------- comms ---------------- */
+function rc_short(r){return 'The '+RACE[r].short;}
 function hail(rid){
-  meet(rid);know(rid,'loc');const st=G.races[rid],rc=RACE[rid];
+  if(G.visit.with&&G.visit.with!==rid){G.visit.hailedBy=G.visit.hailedBy||{};G.visit.hailedBy[G.visit.with]=G.visit.hailed;G.visit.hailed=G.visit.hailedBy[rid]||null;G.visit.topics={};}
+  G.visit.with=rid;V.src=rc_short(rid);meet(rid);know(rid,'loc');const st=G.races[rid],rc=RACE[rid];
   if(G.visit.hailed&&G.visit.hailed.tone){V.dlg={rid,stage:'topics',lines:chatOf(rid)};opener(rid);V.dlg.lines.push({who:rc.speaker,text:'"Back again so soon, Captain? Go on."'});V.talkUntil=performance.now()+2000;return;}
-  const g=st.rep>=30?rc.greet.hi:st.rep<=-15?rc.greet.lo:rc.greet.mid;
-  V.dlg={rid,stage:'tone',lines:chatOf(rid)};opener(rid);V.dlg.lines.push({who:rc.speaker,text:g});G.visit.hailed={};V.talkUntil=performance.now()+2600;
+  const g=greetFor(rid),rx=reactLines(rid);const M=mem(rid);M.n++;M.last=G.turn;
+  V.dlg={rid,stage:'tone',lines:chatOf(rid)};opener(rid);V.dlg.lines.push({who:rc.speaker,text:g});rx.forEach(t=>V.dlg.lines.push({who:rc.speaker,text:t}));const co=residents(here()).find(o=>o!==rid);if(co&&rc.nb){V.dlg.lines.push({who:rc.speaker,text:pick(Math.random,rc.nb)});meet(co);}G.visit.hailed={};V.talkUntil=performance.now()+2600;
   if(!G.hist[rid])hist(rid,'First contact at '+here().name+'.');
+  qEvent('talk',rid).forEach(t=>V.dlg.lines.push({who:t[0]==='"'?rc.speaker:'',text:t}));qStart(rid);
+  if(rc.lieSense&&!G.visit.lieChecked){G.visit.lieChecked=1;let fixed=null;for(const o of SB_RACES){const k=G.kn[o.id];if(!k)continue;for(const f in k){if(f==='portrait'||f==='name'||!k[f]||!k[f].r)continue;let t;try{t=truth(o.id,f);}catch(e){continue;}if(t!==undefined&&JSON.stringify(t)!==JSON.stringify(k[f].v)){k[f]={v:t,r:false};fixed=[o,f];break;}}if(fixed)break;}
+    V.dlg.lines.push({who:rc.speaker,text:fixed?'"One of your rumors about the '+fixed[0].short+' ('+fixed[1]+') was a lie. We have corrected your log."':'"Your log holds no lies we can see. Well kept, Captain."'});if(fixed)note(fixed[0].id,'Kagerin exposed a false rumor about '+fixed[1]+'.','kgr');}
+  if((rid==='kgr'||rid==='elv')&&RACE.ost&&!(G.flags&&G.flags.ostEv)){G.flags=G.flags||{};G.flags.ostEv=1;V.dlg.lines.push({who:rc.speaker,text:rid==='kgr'?'"A warning, Captain. The Ostrevayne salons hide locked dormitories. Their \'labor contracts\' are chains in silk."':'"The Ostrevayne... smile... over locked doors. Their contracts... are cages... with good manners."'});note('ost','The '+rc.short+' say the labor contracts hide holding pens.',rid);}
+  if(RACE.lmn&&rid!=='lmn'&&!(G.flags&&G.flags.lumEv)&&Math.random()<.25){G.flags=G.flags||{};G.flags.lumEv=1;V.dlg.lines.push({who:rc.speaker,text:'"Careful with the Luminae. We fell for them once: one smile, and we traded away half a harvest. Read their terms twice."'});note('lmn','The '+rc.short+' warn their gifts hide bad terms.',rid);}
+  if(rc.warden){const adv=pick(Math.random,['GLUBBARI DRIFT DETECTED NEAR OUTER LANES. RECOMMEND: SPRAY, DO NOT FIRE.','PIRATE SIGNATURES: 2. RECOMMEND: ESCORT OR ALTERNATE ROUTE.','ION STORM: DISSIPATING. LANES: NOMINAL.','HAZARD LEVEL: LOW. PROCEED.']);V.dlg.lines.push({who:rc.speaker,text:'"ADVISORY: '+adv+'"'});}
+  if(rc.rumorHub&&!G.visit.hubTold){const un=SB_RACES.filter(o=>o.id!==rid&&!(G.kn[o.id]&&(G.kn[o.id].portrait||G.kn[o.id].name)));if(un.length){G.visit.hubTold=1;const u=pick(Math.random,un),h=homeOf(u.id);V.src='Hearthmoor travelers';know(u.id,'name',undefined,true);if(h)know(u.id,'loc',undefined,true);V.dlg.lines.push({who:'',text:'Dockside chatter: a newcomer swears the '+u.short+' live near '+(h?h.name:'the edge of the charts')+'.'});note(u.id,'Rumor from Hearthmoor travelers: home near '+(h?h.name:'?')+'.','rumor');}}
+  if(rc.sage&&!G.visit.sageTold){const un=SB_RACES.filter(o=>o.id!==rid&&!(G.kn[o.id]&&(G.kn[o.id].portrait||G.kn[o.id].name)));if(un.length){G.visit.sageTold=1;const u=pick(Math.random,un),h=homeOf(u.id);V.src='The '+rc.short;know(u.id,'name',undefined,true);if(h)know(u.id,'loc',undefined,true);V.dlg.lines.push({who:rc.speaker,text:'"A riddle... for your log. Near '+(h?h.name:'the dark')+'... the '+u.short+' wait... '+(u.kind?u.kind.split(' ').slice(0,4).join(' ').toLowerCase():'')+'... Go... gently."'});note(u.id,'Rumor from the Eldervane: home near '+(h?h.name:'?')+'.','rumor');}}
   if(rc.giftChance&&!G.visit.gifted&&(V.forceGift||Math.random()<rc.giftChance)){G.visit.gifted=1;nomadGift(rid);}
 }
 function nomadGift(rid){const rc=RACE[rid];let t;
   if(Math.random()<.5||cargoUsed()>=G.cargoMax){const c=20+Math.floor(Math.random()*41);G.credits+=c;t='The '+rc.short+' transfer ¢'+c+' to you, unasked.';hist(rid,'Gave you a gift of ¢'+c+'.');}
   else{const it=pick(Math.random,SB_RES.filter(x=>x.id!==rc.taboo)).id,q=addCargo(it,1+Math.floor(Math.random()*2));t='The '+rc.short+' beam '+q+' '+RES[it].name+' into your hold.';hist(rid,'Gave you '+q+' '+RES[it].name+'.');}
   V.dlg.lines.push({who:rc.speaker,text:(rc.gifts?pick(Math.random,rc.gifts):'"A small gift, Captain. Take it."')});V.dlg.lines.push({who:'',text:t});sfx('coin');}
-function nomadDrift(){SB_RACES.forEach(rc=>{if(!rc.nomad||Math.random()>.3)return;const h=homeOf(rc.id);if(G.loc===h.id)return;
-  const opts=G.systems.filter(s=>!s.port&&!s.owner&&s.id!==G.loc);if(!opts.length)return;const n=pick(Math.random,opts);
+function nomadDrift(){SB_RACES.forEach(rc=>{if(!rc.nomad||Math.random()>.3)return;const h=homeOf(rc.id);if(G.loc===h.id||h.co)return;
+  const opts=G.systems.filter(s=>!s.port&&!s.owner&&!s.co&&s.id!==G.loc);if(!opts.length)return;const n=pick(Math.random,opts);
   n.owner=rc.id;n.rich=h.rich;n.derelict=false;h.owner=null;h.rich=shuffle(Math.random,SB_RES.map(x=>x.id)).slice(0,2);G.races[rc.id].home=n.id;
   const k=kn(rc.id).loc;if(k&&k.v===h.name){k.v=n.name;k.r=true;hist(rc.id,'Their fleet drifted from '+h.name+' toward '+n.name+' (rumored).');}});}
 function opener(rid){if(rid==='ill')V.dlg.lines.push({who:RACE[rid].speaker,text:"It's me, it's me, the Illuminati!"});}
@@ -596,7 +833,7 @@ function me(text,tone){V.dlg.lines.push({me:1,text,tone:tone||''});}
 const TOPIC_LINE={needs:'"What do your people need?"',politics:'"Who are your friends, and your rivals?"',region:'"What news from the region?"',special:'"Is there anything we can do for each other?"',press:'"Hand over your best cargo, or else."',callout:'"That\'s a lie, and I can prove it."'};
 function say(text,who){V.dlg.lines.push({who:who===undefined?RACE[V.dlg.rid].speaker:who,text});V.talkUntil=performance.now()+Math.min(4000,1000+text.length*35);}
 function chooseTone(t){
-  const rid=V.dlg.rid,rc=RACE[rid],[d,reply]=rc.tones[t];const tn=SB_TONES.find(x=>x.id===t);me(tn.line,tn.label);G.visit.hailed.tone=t;
+  const rid=V.dlg.rid,rc=RACE[rid],[d,reply]=rc.tones[t];const tn=SB_TONES.find(x=>x.id===t);me(tn.line,tn.label);G.visit.hailed.tone=t;mem(rid).tone=t;
   addRep(rid,d,t==='threat'?'threatened':'tone');if(rc.friendBoost&&d>0)addRep(rid,d*(rc.friendBoost-1),'eager to be liked');if(t==='threat')bully(rid,3,'');
   hist(rid,'Opened talks in a '+SB_TONES.find(x=>x.id===t).label.toLowerCase()+' tone ('+(d>=0?'+':'')+d+').');
   say(reply);V.dlg.stage='topics';sfx(d>=0?'ok':'bad');
@@ -613,33 +850,35 @@ function giftable(rid){const rc=RACE[rid];return [...rc.wants,rc.secretWant].fin
 function topic(v){
   const rid=V.dlg.rid,rc=RACE[rid],st=G.races[rid];G.visit.topics[v]=1;
   if(v==='intel'){sellIntel(rid);commit();return;}
+  if(v==='leverage'){leverage(rid);commit();return;}if(v==='contradict'){contradict(rid);commit();return;}if(v==='tip'){tip(rid);commit();return;}
+  if(v==='bribe'){const c=bribeCost(rid);if(G.credits<c)return;G.credits-=c;G.visit.bribed=1;me('Slides a credit chit across ('+'¢'+c+').','Bribe');addRep(rid,RACE[rid].hatesBullies>.7?2:5,'bribe');mem(rid).gift=1;say(RACE[rid].liar?'"How generous. We will remember this... fondly."':'"A contribution to the people. Accepted."');hist(rid,'You paid a ¢'+c+' gift of goodwill.');commit();return;}
   if(v==='gift'){const g0=giftable(rid);if(g0)me('Offers a gift of '+RES[g0].name+'.','Gift');}else me(TOPIC_LINE[v],v==='press'?'Threat':'');
   if(v==='needs'){
     if(st.rep<-20){say('"What we need is for you to leave."');}
-    else if(rc.liar){const fake=shuffle(Math.random,SB_RES.map(x=>x.id).filter(x=>!rc.wants.includes(x)&&x!==rc.taboo)).slice(0,3);know(rid,'wants',fake,true);lied(rid,'wants');
-      say('"We pay handsomely for '+fake.map(x=>RES[x].name).join(', ')+'."');hist(rid,'Claimed to want '+fake.map(x=>RES[x].name).join(', ')+' (unverified).');}
-    else{know(rid,'wants');say('"We pay handsomely for '+rc.wants.map(x=>RES[x].name).join(', ')+'."');hist(rid,'Learned what they want.');}
+    else if(lies(rid)){const fake=shuffle(Math.random,SB_RES.map(x=>x.id).filter(x=>!rc.wants.includes(x)&&x!==rc.taboo)).slice(0,3);know(rid,'wants',fake,true);lied(rid,'wants');
+      say('"We pay handsomely for '+fake.map(x=>RES[x].name).join(', ')+'."');note(rid,'Claimed to pay well for '+fake.map(x=>RES[x].name).join(', ')+'.',rc.speaker,'wants');hist(rid,'Claimed to want '+fake.map(x=>RES[x].name).join(', ')+' (unverified).');}
+    else{know(rid,'wants');note(rid,'Pays well for '+rc.wants.map(x=>RES[x].name).join(', ')+'.',rc.speaker);say('"We pay handsomely for '+rc.wants.map(x=>RES[x].name).join(', ')+'."');hist(rid,'Learned what they want.');}
   } else if(v==='politics'){
     if(st.rep<0){say('"Our alliances are not your business."');}
     else{let a=truth(rid,'allies'),e=truth(rid,'enemies');
-      if(rc.liar){[a,e]=[e,a];if(!a.length&&!e.length)a=[pick(Math.random,SB_RACES.filter(x=>x.id!==rid)).id];know(rid,'allies',a,true);know(rid,'enemies',e,true);lied(rid,'politics');hist(rid,'Described their alliances (unverified).');}
-      else{know(rid,'allies');know(rid,'enemies');}
+      if(lies(rid)){[a,e]=[e,a];if(!a.length&&!e.length)a=[pick(Math.random,SB_RACES.filter(x=>x.id!==rid)).id];know(rid,'allies',a,true);know(rid,'enemies',e,true);lied(rid,'politics');note(rid,'Claimed friends: '+(a.map(x=>RACE[x].short).join(', ')||'none')+'; enemies: '+(e.map(x=>RACE[x].short).join(', ')||'none')+'.',rc.speaker,'politics');hist(rid,'Described their alliances (unverified).');}
+      else{know(rid,'allies');know(rid,'enemies');note(rid,'Friends: '+(a.map(x=>RACE[x].short).join(', ')||'none')+'; enemies: '+(e.map(x=>RACE[x].short).join(', ')||'none')+'.',rc.speaker);}
       a.concat(e).forEach(x=>{if(!G.kn[x])G.kn[x]={};if(!kn(x).name)kn(x).name={v:true,r:false};});
       say('"Our friends: '+(a.length?a.map(x=>RACE[x].short).join(', '):'none worth naming')+'. Our enemies: '+(e.length?e.map(x=>RACE[x].short).join(', '):'none, for now')+'."');}
   } else if(v==='region'){
     const r=rumor(rid);say('"Travelers talk. Here is what we hear..."');V.dlg.lines.push({who:'',text:r});
   } else if(v==='callout'){
-    if(lieProof(rid)){const[d,l]=rc.liar.caught;addRep(rid,d,'caught lying');say(l);['wants','allies','enemies'].forEach(f=>{const k=kn(rid)[f];if(k&&k.r)delete kn(rid)[f];know(rid,f);});
+    if(lieProof(rid)){const[d,l]=rc.liar.caught;addRep(rid,d,'caught lying');say(l);disprove(rid,'your evidence');mem(rid).caught=1;['wants','allies','enemies'].forEach(f=>{const k=kn(rid)[f];if(k&&k.r)delete kn(rid)[f];know(rid,f);});
       say('"We pay for '+rc.wants.map(x=>RES[x].name).join(', ')+'. We '+describe(rid,'allies',truth(rid,'allies'))+'; we '+describe(rid,'enemies',truth(rid,'enemies'))+'."');hist(rid,'Caught them lying. The log now shows the truth.');sfx('ok');}
     else{const[d,l]=rc.liar.bluff;addRep(rid,d,'baseless accusation');say(l);hist(rid,'Accused them of lying with no proof ('+d+').');sfx('bad');}
   } else if(v==='special'){say(rc.special.prompt,'');V.dlg.stage='special';}
   else if(v==='gift'){
-    const g=giftable(rid);if(g){G.cargo[g]--;const secret=g===rc.secretWant;ripple(rid,secret?9:6,'gift');hist(rid,'Gave a gift of '+RES[g].name+'.');
+    const g=giftable(rid);if(g){G.cargo[g]--;const secret=g===rc.secretWant;mem(rid).gift=1;ripple(rid,secret?9:6,'gift');hist(rid,'Gave a gift of '+RES[g].name+'.');
       say(secret?'"How did you know? This is... precious to us. Thank you."':'"A thoughtful gift. We will remember it."');if(secret)know(rid,'secret');sfx('coin');}
   } else if(v==='press'){
     // bullying a planet: strength-respecters may pay tribute
     const ok=rc.respectsStrength>=.5||G.races[rid].tech<3;
-    if(ok){const it=pick(Math.random,homeOf(rid).rich);const q=addCargo(it,3);say('"...Fine. Take '+q+' '+RES[it].name+' and go."');bully(rid,8,'extortion');hist(rid,'Extorted '+q+' '+RES[it].name+'.');}
+    if(ok){const it=pick(Math.random,homeOf(rid).rich);const q=addCargo(it,3);say('"...Fine. Take '+q+' '+RES[it].name+' and go."');bully(rid,8,'extortion');mem(rid).extorted=1;gossip(rid,'extorted');hist(rid,'Extorted '+q+' '+RES[it].name+'.');}
     else{say('"You will get nothing from us but a long memory."');bully(rid,6,'extortion');hist(rid,'Attempted extortion; refused.');}
     sfx('bad');
   }
@@ -658,7 +897,7 @@ function sellIntel(rid){const rc=RACE[rid],t=rc.nemesis,I=rc.intel,sc=intelScore
   if(d>=6){const it=pick(Math.random,SB_RES.filter(x=>x.id!==rc.taboo)).id,q=addCargo(it,2+Math.floor(d/4));if(q)r+=', '+q+' '+RES[it].name;}
   say(d>=8?I.big:I.small);V.dlg.lines.push({who:'',text:'The '+rc.short+' pay for your intel on the '+RACE[t].short+': '+r+'.'});
   ripple(rid,Math.min(18,3+Math.round(d*1.5)),'intel on the '+RACE[t].short);know(rid,'enemies');
-  hist(rid,'Sold intel on the '+RACE[t].short+' ('+intelGrade(d)+', '+r+').');hist(t,'You sold their secrets to the '+rc.short+'.');G.intelSold[rid]=intelScore(t);sfx('coin');}
+  hist(rid,'Sold intel on the '+RACE[t].short+' ('+intelGrade(d)+', '+r+').');hist(t,'You sold their secrets to the '+rc.short+'.');gossip(t,'sold');G.intelSold[rid]=intelScore(t);sfx('coin');}
 function special(i){
   const rid=V.dlg.rid,rc=RACE[rid],o=rc.special.options[i];V.dlg.stage='topics';
   me(o.t);say(o.reply.replace(/^"|"$/g,'').length?o.reply:o.reply);
@@ -667,6 +906,28 @@ function special(i){
   if(o.fx==='tech'&&!G.hydro){G.hydro=1;G.fuelMax+=25;G.fuel=G.fuelMax;toast('Imperial hydro-condenser fitted: +25 fuel capacity.','g');}
   if(o.fx==='empath'){G.empRead=1;toast(rc.short+' empaths will now sense when others lie to you.','g');}
   if(o.fx==='intel'){know(rid,'secret');}
+  if(o.fx&&/^(expose|free_)/.test(o.fx)){const Q=qState();G.flags=G.flags||{};const q=Q.unbind;let t;
+    if(o.fx==='expose'){if(q)t=q.step>=2?'The pens are already open.':'They know you know. Now choose how to free the captives.';
+      else if(!G.flags.ostEv)t='"Holding pens? What a vivid imagination. Do have more wine." (You need evidence: scan their world or ask around.)';
+      else{Q.unbind={step:1,start:G.turn};disprove&&disprove(rid,'your evidence');t='Velorien\'s smile freezes. "Those are… staff quarters." You show him the scans. Quest started: The Quiet Unbinding.';hist(rid,'You exposed their holding pens.');toast('New quest: The Quiet Unbinding','g');}}
+    else if(!q||q.step!==1)t='"Release? Whatever from? Everyone here is quite content." (They will not discuss it until you expose them.)';
+    else{let ok=false,why='';
+      if(o.fx==='free_neg'){ok=G.races[rid].rep>=10;why='They need to respect you more first (rep 10+).';}
+      if(o.fx==='free_bribe'){ok=G.credits>=150;if(ok)G.credits-=150;why='You need ¢150.';}
+      if(o.fx==='free_ally'){ok=['kgr','elv'].some(a=>G.races[a]&&G.races[a].rep>=20);why='Earn the Kagerin or Eldervane trust first (rep 20+).';}
+      if(o.fx==='free_neg'&&!ok&&kn(rid).secret){ok=true;}
+      t=ok?'Done. The doors open quietly; the workers step into the light, blinking.':'Not yet. '+why+' Take your time.';
+      if(ok){qEvent('free',rid).forEach(x=>V.dlg.lines.push({who:'',text:x}));hist(rid,'Freed their captives.');}}
+    V.dlg.lines.push({who:'',text:t});}
+  if(o.fx==='care'){G.visit=G.visit||{};if(G.visit.cared)V.dlg.lines.push({who:'',text:'MOCHI-7: "You were already treated this visit. Rest is the best medicine."'});else{G.visit.cared=1;G.ls=100;G.hull=Math.min(100,(G.hull==null?100:G.hull)+20);V.dlg.lines.push({who:'',text:'Life support restored to 100%, hull +20% (free).'});}}
+  if(o.fx==='gadget'){G.up=G.up||{};if(G.up.scanner)V.dlg.lines.push({who:'',text:'You already have a deep scanner.'});else if(G.credits>=160){G.credits-=160;G.up.scanner=G.turn;V.dlg.lines.push({who:'',text:'Kumoya deep scanner installed (−¢160).'});}else V.dlg.lines.push({who:'',text:'Not enough credits (¢160 needed).'});}
+  if(o.fx==='smith'){if(G.credits>=80){G.credits-=80;G.hull=100;G.ls=100;V.dlg.lines.push({who:'',text:'Hull and life support restored to 100% (−¢80).'});}else V.dlg.lines.push({who:'',text:'Not enough credits (¢80 needed).'});}
+  if(o.fx==='forgeDeal'){if(G.credits>=40){G.credits-=40;G.forgeDeal=1;V.dlg.lines.push({who:'',text:'Your next ship upgrade is 30% off (−¢40).'});}else V.dlg.lines.push({who:'',text:'Not enough credits (¢40 needed).'});}
+  if(o.fx==='translate'){G.translate=1;V.dlg.lines.push({who:'',text:'Translation primer received: Oomba speech and Kthrax hive patterns will now be translated, and the Kthrax swarm will let you approach to talk.'});}
+  if(o.fx==='escort'){if(G.credits>=60){G.credits-=60;G.escort=(G.escort||0)+3;V.dlg.lines.push({who:'',text:'A Lanewarden monolith falls in beside you. It will ward off your next 3 lane encounters.'});}else V.dlg.lines.push({who:rc.speaker,text:'"FUNDS: INSUFFICIENT. REQUIRED: 60."'});}
+  if(o.fx&&/^charm/.test(o.fx)){G.flags=G.flags||{};const see=G.flags.lumEv||(G.up&&G.up.resist);const T={charm1:['a prism that only flatters the eye','¢120 for a pretty glass bauble'],charm2:['a blessing that is only a song','2 crystal for a nice song'],charm3:['friendship that comes with a 5% tithe on your next sale','a small tithe on your next sale']}[o.fx];
+    if(see){V.dlg.lines.push({who:'',text:'[True terms: '+T[1]+'.] You smile and decline. Ilvaresh laughs. "Clever Captain."'});}
+    else{if(o.fx==='charm1')G.credits=Math.max(0,G.credits-120);if(o.fx==='charm2'&&G.cargo&&G.cargo.crystal)G.cargo.crystal=Math.max(0,G.cargo.crystal-2);if(o.fx==='charm3')G.tithe=1;V.dlg.lines.push({who:'',text:'You feel wonderful about it. (Later you realize it was '+T[0]+'.)'});}}
   if(o.fx==='reckless'){SB_RACES.forEach(r=>{if(r.hatesBullies>=.5&&r.id!==rid)addRep(r.id,-2,'reckless weapons fire');});V.fireUntil=performance.now()+600;sfx('fire');}
   if(o.fx==='charts'){const others=SB_RACES.filter(r=>r.id!==rid&&!(kn(r.id).loc&&!kn(r.id).loc.r));if(others.length){const t=pick(Math.random,others).id;if(!kn(t).name)kn(t).name={v:true,r:false};know(t,'loc');toast('Star charts: '+RACE[t].short+' homeworld located.','g');}}
   sfx(o.rep>=0?'ok':'bad');commit();
@@ -708,10 +969,10 @@ function deliverFavor(fid){const f=favs().find(x=>x.id===fid&&x.state==='open');
     say(shady?'"A dossier? How... interesting. Thank you, Captain."':'"From the '+RACE[f.from].short+'? How kind. Our thanks, Captain."');
     let r='Favor complete for the '+RACE[f.from].short+'.';if(f.credits){G.credits+=f.credits;r+=' +¢'+f.credits+'.';}
     if(f.intel){const t=favorIntel();V.dlg.lines.push({who:'',text:'Intel from the '+RACE[f.from].short+': '+t+'.'});r+=' Intel logged.';}
-    hist(f.from,'Delivered their '+K.item.toLowerCase()+' to the '+RACE[f.to].short+'.');hist(f.to,'Received a '+K.item.toLowerCase()+' from the '+RACE[f.from].short+' via you.');toast(r,'g');sfx('coin');}
+    gossip(f.from,'helped',true);hist(f.from,'Delivered their '+K.item.toLowerCase()+' to the '+RACE[f.to].short+'.');hist(f.to,'Received a '+K.item.toLowerCase()+' from the '+RACE[f.from].short+' via you.');toast(r,'g');sfx('coin');}
   else{f.state='betrayed';f.gaveTo=here_;me('Hands the '+RACE[f.from].short+' '+K.item.toLowerCase()+' to the '+RACE[here_].short+' instead.');
     const enemy=relOf(f.from,here_)===-1;addRep(f.from,enemy?-15:-6,'favor misdelivered');addRep(here_,enemy?8:2,'gained leverage');
-    if(enemy)SB_RACES.forEach(o=>{if(o.id!==f.from&&o.id!==here_&&relOf(f.from,o.id)===1)addRep(o.id,-3,'betrayed an ally');});
+    gossip(f.from,'betrayed');
     say(enemy?(f.kind==='prisoner'?'"A '+RACE[f.from].short+' captive! You have done us a great service."':'"Secrets of the '+RACE[f.from].short+'? Most welcome."'):'"This was not meant for us... but we will keep it."');
     hist(f.from,'You gave their '+K.item.toLowerCase()+' to the '+RACE[here_].short+' instead.');hist(here_,'Handed them a '+RACE[f.from].short+' '+K.item.toLowerCase()+'.');
     toast('The '+RACE[f.from].short+' will hear of this.','b');sfx('bad');}
@@ -747,10 +1008,10 @@ function market(){
     Object.keys(G.cargo).forEach(id=>{if(G.cargo[id]>0&&!s.rich.includes(id))items.push({id,buy:null,sell:Math.round(RES[id].base*.8)});});
     return{note:'Free port market. Fair prices, no politics.',items};}
   if(!s.owner)return{refuse:'No one here to trade with. Your hold:'};
-  const rid=s.owner,rc=RACE[rid],st=G.races[rid];
+  const rid=act(s),rc=RACE[rid],st=G.races[rid];
   if(!kn(rid).portrait)return{refuse:'Hail the locals before trading. Your hold:'};
   if(st.rep<-30)return{refuse:rc.short+' traders refuse to deal with you. Improve your reputation first. Your hold:'};
-  const f=1+st.rep/300;const items=[];
+  const f=moraleMult()*(1+st.rep/300)*(G.stock&&G.stock[rid]!=null&&G.turn-G.stock[rid]<6?1.08:1);const items=[];
   const wanted=[...rc.wants,rc.secretWant];
   const add=(id,mult,tag,canBuy)=>{if(items.some(x=>x.id===id))return;const w=wanted.includes(id),d=w?demOf(rid,id):1;
     items.push({id,tag,dem:w?d:null,full:w&&d<DEM_MIN,buy:canBuy?Math.max(1,Math.round(RES[id].base*mult/f*1.1*(1+bumpOf(s.id,id)))):null,sell:Math.max(1,Math.round(RES[id].base*mult*.9*f*(w?.35+.65*d:1)))});};
@@ -762,14 +1023,15 @@ function market(){
 }
 function trade(kind,id){
   const s=here(),m=market(),it=m.items.find(x=>x.id===id);if(!it)return;
-  const rid=s.owner,rc=RACE[rid];
+  const rid=act(s),rc=RACE[rid];
   if(kind==='sell'&&rid&&id===rc.taboo){addRep(rid,-6,'offered a taboo good');know(rid,'taboo');toast(rc.short+' are offended: '+RES[id].name+' is taboo to them!','b');sfx('bad');hist(rid,'Offended them by offering '+RES[id].name+'.');commit();return;}
-  if(kind==='buy'){if(it.buy==null||G.credits<it.buy||cargoUsed()>=G.cargoMax)return;G.credits-=it.buy;G.cargo[id]=(G.cargo[id]||0)+1;bumpAdd(s.id,id);}
+  if(kind==='buy'){if(it.buy==null||G.credits<it.buy||cargoUsed()>=G.cargoMax)return;G.credits-=it.buy;G.cargo[id]=(G.cargo[id]||0)+1;const P=(G.paid=G.paid||{})[id]=G.paid[id]||{q:0,c:0};P.q++;P.c+=it.buy;bumpAdd(s.id,id);}
   else{if(!G.cargo[id])return;if(it.full){toast(FULL_LINE[rid]||'They have plenty of that for now.');V.keepScroll=true;renderAll();V.keepScroll=false;return;}
-    G.cargo[id]--;G.credits+=it.sell;if(it.dem!=null)demSet(rid,id,it.dem-DEM_DROP);}
+    G.cargo[id]--;G.credits+=it.sell;if(G.paid&&G.paid[id]&&G.paid[id].q){const P=G.paid[id];P.c-=P.c/P.q;P.q--;}if(it.dem!=null)demSet(rid,id,it.dem-DEM_DROP);}
   sfx('coin');
-  if(rid){if(G.visit.tradeRep<5){G.visit.tradeRep++;ripple(rid,1,'trade');}
+  if(rid){tradeLog(rid,kind,id,kind==='buy'?it.buy:it.sell);if(G.visit.tradeRep<5){G.visit.tradeRep++;ripple(rid,1,'trade');}
     if(kind==='sell'&&(rc.wants.includes(id)))know(rid,'wants');
+    if(kind==='sell')qEvent('sell',rid,id).forEach(t=>toast(t,'g'));
     const H=G.hist[rid]=G.hist[rid]||[];const key='T'+G.turn+': Trade';const ledger=G.visit.ledger=G.visit.ledger||{b:{},s:{},net:0};
     (kind==='buy'?ledger.b:ledger.s)[id]=((kind==='buy'?ledger.b:ledger.s)[id]||0)+1;ledger.net+=kind==='buy'?-it.buy:it.sell;
     const txt=key+(Object.keys(ledger.b).length?' · bought '+Object.entries(ledger.b).map(([k,v])=>v+' '+RES[k].name).join(', '):'')+(Object.keys(ledger.s).length?' · sold '+Object.entries(ledger.s).map(([k,v])=>v+' '+RES[k].name).join(', '):'')+' (net '+(ledger.net>=0?'+':'')+ledger.net+' cr)';
@@ -780,38 +1042,43 @@ function trade(kind,id){
 /* ---------------- tactical ---------------- */
 function tac(v){
   const E=G.enc,rid=E.race,isR=!!RACE[rid];const nm=isR?RACE[rid].short:'Corsair';
+  if(rid==='glb'&&E.state==='active'){E.state='fled';
+    if(v==='brush'){E.result='You gently scoot the '+E.name+' aside. Bubblesnout shouts "TACTICAL RETREAT!" and floats off, sulking magnificently.';addRep('glb',2,'handled gently');hist('glb','You gently nudged their ship '+E.name+' aside.');}
+    else if(v==='swat'){E.result='A soft shield pulse sends the '+E.name+' spinning like a bath toy. It drifts away, bowl sloshing, crew shouting "WE MEANT TO DO THAT!"';addRep('glb',-1,'swatted');gossip('glb','swatted');SB_RACES.forEach(r=>{if(r.respectsStrength>.8&&r.id!=='glb')addRep(r.id,1,'enjoyed the show');});hist('glb','You swatted their ship '+E.name+'. They are writing a ballad of revenge.');}
+    else {E.result='You sip your tea. The '+E.name+' fires 47 shots, all of which bounce off. Eventually they declare victory and leave, very proud.';addRep('glb',1,'let them "win"');hist('glb','Their ship '+E.name+' "defeated" you. They are celebrating.');}
+    commit();return;}
   if(v==='scare'){E.state='fled';E.result='The '+E.name+' turns tail and runs. No shots fired.';if(isR){addRep(rid,-1,'intimidated');SB_RACES.forEach(r=>{if(r.respectsStrength>.5&&r.id!==rid)addRep(r.id,1,'respects your resolve');});hist(rid,'Scared off their ship '+E.name+'.');}else SB_RACES.forEach(r=>{if(r.hatesBullies>.6)addRep(r.id,1,'safer trade lanes');});}
   if(v==='loot'){E.state='disabled';V.fireUntil=performance.now()+600;sfx('fire');const got=[];for(let i=0;i<2;i++){const id=pick(Math.random,SB_RES).id;const q=addCargo(id,2+Math.floor(Math.random()*3));if(q)got.push(q+' '+RES[id].name);}
-    E.result='Engines disabled in one volley. You looted '+(got.join(' and ')||'nothing (hold full)')+'.';
-    if(isR){bully(rid,10,'ship looted');hist(rid,'You disabled and looted their ship '+E.name+'.');}else SB_RACES.forEach(r=>{if(r.respectsStrength>.5)addRep(r.id,1,'pirates punished');});}
-  if(v==='spare'){E.state='disabled';V.fireUntil=performance.now()+600;sfx('fire');const r=rumor(isR?rid:null);E.result='Their weapons are slag, but you let them limp home. In gratitude they share intel. '+r;
-    if(isR){mercy(rid,6,'spared their crew');hist(rid,'Disabled then spared their ship '+E.name+'.');}else mercy(null,3,'');}
-  if(v==='ignore'){E.state='fled';E.result='Their shots splash harmlessly off your shields. Bored, they leave.';if(isR&&RACE[rid].respectsStrength>.5)addRep(rid,-1,'seen as passive');}
+    damage(2,'return fire');E.result='Engines disabled in one volley. You looted '+(got.join(' and ')||'nothing (hold full)')+'.';
+    if(isR){bully(rid,10,'ship looted');gossip(rid,'raided');hist(rid,'You disabled and looted their ship '+E.name+'.');}else SB_RACES.forEach(r=>{if(r.respectsStrength>.5)addRep(r.id,1,'pirates punished');});}
+  if(v==='spare'){damage(2,'return fire');E.state='disabled';V.fireUntil=performance.now()+600;sfx('fire');const r=rumor(isR?rid:null);E.result='Their weapons are slag, but you let them limp home. In gratitude they share intel. '+r;
+    if(isR){mercy(rid,6,'spared their crew');gossip(rid,'spared',true);hist(rid,'Disabled then spared their ship '+E.name+'.');}else mercy(null,3,'');}
+  if(v==='ignore'){E.state='fled';damage(3,'glancing shots');E.result='A few glancing shots scuff the paint, then they lose interest and leave.';if(isR&&RACE[rid].respectsStrength>.5)addRep(rid,-1,'seen as passive');}
   commit();
 }
 
 /* ---------------- input ---------------- */
 document.addEventListener('pointerdown',()=>{audioInit();if(AU.ctx&&AU.ctx.state==='suspended')AU.ctx.resume();},{passive:true});
-$('stations').addEventListener('click',e=>{const b=e.target.closest('[data-st]');if(!b)return;V.view=b.dataset.st;V.logSel=null;sfx('tap');
-  if(V.view==='comms'&&!V.dlg&&here().owner&&G.visit.hailed)hail(here().owner);
+$('stations').addEventListener('click',e=>{const b=e.target.closest('[data-st]');if(!b)return;V.view=b.dataset.st;V.logSel=null;V.logFrom=null;sfx('tap');
+  if(V.view==='comms'&&!V.dlg&&here().owner&&G.visit.hailed)hail(act(here()));
   renderAll();});
 $('panel').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b||b.disabled)return;const a=b.dataset.a,v=b.dataset.v;sfx('tap');
   switch(a){
     case 'warp':warpTo(V.sel);break;
     case 'limp':{const ports=G.systems.filter(s=>s.port).sort((p,q)=>dist(G.loc,p.id)-dist(G.loc,q.id));toast('Running on fumes... limping to '+ports[0].name+'.');warpTo(ports[0].id,true);break;}
     case 'scan1':scan(1);break;case 'scan2':scan(2);break;
-    case 'hail':hail(here().owner);commit();break;
+    case 'hail':hail(v&&residents(here()).includes(v)?v:act(here()));commit();break;
     case 'tone':chooseTone(v);break;case 'topic':topic(v);break;case 'spec':special(+v);break;
     case 'close':V.dlg=null;commit();break;
     case 'go-trade':V.view='trade';renderAll();break;
     case 'go-tactical':V.view='tactical';renderAll();break;
     case 'port-rumor':if(G.credits>=10){G.credits-=10;toast(rumor(null));}commit();break;
     case 'buy':case 'sell':trade(a,v);break;
-    case 'refuel':refuel();break;
+    case 'refuel':refuel();break;case 'repair':repair();break;case 'upg':buyUpg(v);break;case 'mapgo':V.logFrom=null;V.logSel=null;V.sel=+v;V.mapAt=null;V.mapFocus=+v;V.view='helm';renderAll();break;
     case 'fav-yes':favorAnswer(true);break;case 'fav-no':favorAnswer(false);break;case 'fav-give':deliverFavor(v);break;
     case 'tac':tac(v);break;
     case 'tac-done':G.enc=null;V.view='helm';commit();break;
-    case 'logsel':V.logSel=v;renderAll();break;case 'logback':V.logSel=null;renderAll();break;
+    case 'logsel':V.logSel=v;renderAll();break;case 'dlglog':V.logFrom={rid:V.dlg&&V.dlg.rid};V.view='log';V.logSel=V.dlg?V.dlg.rid:null;renderAll();break;case 'dlgmis':V.logFrom={rid:V.dlg&&V.dlg.rid};V.view='missions';renderAll();break;case 'dlgstat':V.logFrom={rid:V.dlg&&V.dlg.rid};V.view='status';renderAll();break;case 'logret':V.logFrom=null;V.logSel=null;V.view='comms';renderAll();break;case 'logback':V.logSel=null;renderAll();break;
   }});
 
 /* ---------------- title, slots, menu ---------------- */
@@ -825,7 +1092,7 @@ function slotPicker(mode){
   for(let n=1;n<=3;n++){const has=!!readSlot(n);h+='<button class="btn slot" data-slot="'+n+'" '+(mode==='load'&&!has?'disabled':'')+'>'+slotHtml(n)+(mode==='new'&&has?'<br><span class="small" style="color:#ff8f9a">Overwrites this save</span>':'')+'</button>';}
   h+='<button class="btn" data-x="1">Cancel</button>';modal(h);
   $('modal').onclick=e=>{const b=e.target.closest('button');if(!b||b.disabled)return;sfx('tap');if(b.dataset.x){$('modal').classList.add('hide');return;}
-    const n=+b.dataset.slot;if(mode==='new'){newGame(n);save();introToast();}else{G=migrate(readSlot(n));G.slot=n;}startPlaying();};
+    const n=+b.dataset.slot;if(mode==='new'){newGame(n);save();startPlaying();showIntro();return;}else{G=migrate(readSlot(n));G.slot=n;}startPlaying();};
 }
 function introToast(){toast('Captain, you command the envoy ship. Explore, listen, and make friends (or not).','g');}
 $('tContinue').onclick=()=>{sfx('tap');const n=lastSlot();if(n){G=migrate(readSlot(n));G.slot=n;startPlaying();}};
@@ -862,5 +1129,5 @@ resize();requestAnimationFrame(loop);
 if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!params.get('test'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 const tm=params.get('test');
 if(tm)testSetup(tm);else showTitle();
-SB.api={special,demOf,favs,favorAnswer,deliverFavor,newGame,warpTo,scan,hail,chooseTone,topic,trade,tac,spawnEncounter,renderAll,save,readSlot,testSetup,setView:v=>{V.view=v;renderAll();}};
+SB.api={note,friendlyTow,missions,missionBadgeCount,addLead,lifeTick,warpTo,arrive,foundCount,milestones,damage,repair,buyUpg,qEvent,qStart,market,fuelCost,bribeCost,yardHtml,tier,greetFor,reactLines,processGossip,gossip,leverTarget,contraSource,tipTarget,know,kn,meet,hist,addRep,mem,relOf,truth,lies,V:()=>V,special,demOf,favs,favorAnswer,deliverFavor,newGame,warpTo,scan,hail,chooseTone,topic,trade,tac,spawnEncounter,renderAll,save,readSlot,testSetup,setView:v=>{V.view=v;renderAll();}};
 })();
