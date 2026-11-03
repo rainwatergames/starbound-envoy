@@ -1,4 +1,4 @@
-/*! STARBOUND ENVOY v3.1.0 — © 2026 Rainwater Games (Jeff Rainwater). All rights reserved. */
+/*! STARBOUND ENVOY v3.1.1 — © 2026 Rainwater Games (Jeff Rainwater). All rights reserved. */
 'use strict';
 (function(){
 const VERSION='0.2';
@@ -18,7 +18,7 @@ const params=new URLSearchParams(location.search);
 
 /* ---------------- world generation ---------------- */
 function showIntro(){const d=document.createElement('div');d.id='intro';
-  d.innerHTML='<canvas id="introSky"></canvas><div class="itx"><div class="ihd">STARBOUND ENVOY</div><div class="small">TERRAN CONCORD · v3.1.0</div><p>You are an envoy of the Terran Concord, sent from Earth past the last charted star.</p><p>Find the living worlds no one has met. Learn their secrets.</p><p>Bind the galaxy together, one trade route at a time.</p><button class="btn pri" id="introGo">Begin</button><div class="small">tap anywhere to skip</div></div>';
+  d.innerHTML='<canvas id="introSky"></canvas><div class="itx"><div class="ihd">STARBOUND ENVOY</div><div class="small">TERRAN CONCORD · v3.1.1</div><p>You are an envoy of the Terran Concord, sent from Earth past the last charted star.</p><p>Find the living worlds no one has met. Learn their secrets.</p><p>Bind the galaxy together, one trade route at a time.</p><button class="btn pri" id="introGo">Begin</button><div class="small">tap anywhere to skip</div></div>';
   document.body.appendChild(d);const c=d.querySelector('canvas'),x=c.getContext('2d');c.width=innerWidth;c.height=innerHeight;
   const st=[...Array(160)].map(()=>({x:Math.random()*c.width,y:Math.random()*c.height,z:Math.random()*2+.3}));let on=true;
   (function fr(){if(!on)return;x.fillStyle='rgba(3,6,18,.45)';x.fillRect(0,0,c.width,c.height);st.forEach(p=>{p.y+=p.z*.6;if(p.y>c.height){p.y=0;p.x=Math.random()*c.width;}x.fillStyle='rgba(200,225,255,'+(.3+p.z/3)+')';x.fillRect(p.x,p.y,p.z,p.z);});requestAnimationFrame(fr);})();
@@ -297,11 +297,12 @@ function setSound(on){AU.on=on;localStorage.setItem('sbe.mute',on?'0':'1');if(AU
 
 /* ---------------- images ---------------- */
 const IMG={};
-SB_RACES.forEach(rc=>{const im=new Image();im.src=rc.img;IMG[rc.id]=im;im.onload=()=>{
+function loadPortrait(key,rc){const im=new Image();im.src=rc.img;IMG[key]=im;im.onload=()=>{
   // sample eyelid colors (skin just above each eye) for blinking
   try{const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;const x=c.getContext('2d');x.drawImage(im,0,0);
     im._lid=rc.eyes.map(([ex,ey])=>{const d=x.getImageData(Math.round(ex*c.width),Math.round((ey-rc.eyeR*1.6)*c.height),1,1).data;return 'rgb('+d[0]+','+d[1]+','+d[2]+')';});}catch(e){im._lid=null;}
-};});
+};}
+SB_RACES.forEach(rc=>{loadPortrait(rc.id,rc);if(rc.alt){loadPortrait(rc.id+'#alt',rc.alt);rc._speaker=rc.speaker;Object.defineProperty(rc,'speaker',{get(){return (typeof G!=='undefined'&&G&&G.visit&&G.visit.alt===rc.id)?rc.alt.speaker:rc._speaker;},configurable:true});}});
 
 /* ---------------- planet renderer (spherical texture mapping) ---------------- */
 const PAL={terran:[[30,70,140],[40,110,60],[120,140,70],[230,230,240]],desert:[[150,90,40],[200,140,70],[230,190,120],[170,100,60]],
@@ -375,7 +376,7 @@ function drawNebula(R,hue){
   g.addColorStop(0,'hsla('+hue+',70%,45%,.25)');g.addColorStop(1,'hsla('+hue+',70%,30%,0)');cx.fillStyle=g;cx.fillRect(R.x,R.y,R.w,R.h);
 }
 function drawPortrait(R,t,rid){
-  const im=IMG[rid],rc=RACE[rid];
+  let rc=RACE[rid];const ALT=rc.alt&&G.visit&&G.visit.alt===rid;const im=ALT?IMG[rid+'#alt']:IMG[rid];if(ALT)rc=Object.assign({},rc,{eyes:rc.alt.eyes,eyeR:rc.alt.eyeR,blink:rc.alt.blink});
   cx.fillStyle='#000';cx.fillRect(R.x,R.y,R.w,R.h);
   if(!im||!im.complete||!im.naturalWidth)return;
   const talking=V.talkUntil>performance.now();
@@ -600,7 +601,7 @@ function relRows(id,f){const k=kn(id)[f];if(!k)return UNK;if(!k.v.length)return'
   return k.v.map(x=>{const kx=kn(x);const nm=kx.name?RACE[x].short:'???';const rp=kx.portrait?tier(x)+' '+Math.round(G.races[x].rep):'???';
     return'<button class="cx" data-a="logsel" data-v="'+x+'"><b>'+esc(nm)+'</b><span>'+esc(rp)+'</span></button>';}).join('')+(k.r?'<span class="tag">rumored</span>':'');}
 function loreRows(id){const rc=RACE[id],k=kn(id),m=(G.mem||{})[id]||{},home=homeOf(id),T=(G.trades||{})[id]||[];
-  const L=[['Leader',rc.speaker,!!k.portrait],['Nature',rc.kind,!!k.portrait],['Temperament',rc.hint,m.n>=1],
+  const L=[['Leader',(rc._speaker||rc.speaker)+(rc.alt?' · also: '+rc.alt.speaker:''),!!k.portrait],['Nature',rc.kind,!!k.portrait],['Temperament',rc.hint,m.n>=1],
     ['Voice',{sly:'Silver-tongued; may bend the truth.',martial:'Blunt; respects strength.',gentle:'Soft-spoken; feels harm deeply.',formal:'Measured and protocol-minded.'}[voice(rc)],m.n>=2||!!(k.allies&&!k.allies.r)],
     ['Known ships',(rc.ships||[]).join(', '),!!(G.hist[id]||[]).some(x=>/ship/.test(x))||home.scan>=2],
     ['Sworn rival',rc.nemesis&&RACE[rc.nemesis]?RACE[rc.nemesis].short:'None',!!(rc.nemesis&&(k.enemies||G.intelSold&&G.intelSold[id]!=null))||(!rc.nemesis&&!!k.enemies)],
@@ -610,7 +611,7 @@ function loreRows(id){const rc=RACE[id],k=kn(id),m=(G.mem||{})[id]||{},home=home
 function logEntry(id){
   const k=kn(id),rc=RACE[id],st=G.races[id];
   let h=(V.logFrom?'<button class="btn pri" data-a="logret">‹ Back to conversation</button>':'')+'<button class="btn" data-a="logback">‹ All species</button>';
-  h+=k.portrait?'<img class="big" src="'+rc.img+'" alt="'+esc(rc.short)+'">':'<div class="pt" style="width:100%;height:120px">?</div>';
+  h+=k.portrait&&rc.alt?'<div style="display:flex;gap:6px"><figure style="flex:1;margin:0"><img class="big" src="'+rc.img+'" alt="'+esc(rc._speaker)+'"><figcaption class="small">'+esc(rc._speaker)+'</figcaption></figure><figure style="flex:1;margin:0"><img class="big" src="'+rc.alt.img+'" alt="'+esc(rc.alt.speaker)+'"><figcaption class="small">'+esc(rc.alt.speaker)+'</figcaption></figure></div>':k.portrait?'<img class="big" src="'+rc.img+'" alt="'+esc(rc.short)+'">':'<div class="pt" style="width:100%;height:120px">?</div>';
   h+='<h2 style="margin-top:8px">'+esc(raceName(id))+'</h2>';
   // reputation
   const RL=(G.repLog||{})[id]||[];
@@ -807,7 +808,8 @@ function hail(rid){
   G.visit.with=rid;V.src=rc_short(rid);meet(rid);know(rid,'loc');const st=G.races[rid],rc=RACE[rid];
   if(G.visit.hailed&&G.visit.hailed.tone){V.dlg={rid,stage:'topics',lines:chatOf(rid)};opener(rid);V.dlg.lines.push({who:rc.speaker,text:'"Back again so soon, Captain? Go on."'});V.talkUntil=performance.now()+2000;return;}
   const g=greetFor(rid),rx=reactLines(rid);const M=mem(rid);M.n++;M.last=G.turn;
-  V.dlg={rid,stage:'tone',lines:chatOf(rid)};opener(rid);V.dlg.lines.push({who:rc.speaker,text:g});rx.forEach(t=>V.dlg.lines.push({who:rc.speaker,text:t}));const co=residents(here()).find(o=>o!==rid);if(co&&rc.nb){V.dlg.lines.push({who:rc.speaker,text:pick(Math.random,rc.nb)});meet(co);}G.visit.hailed={};V.talkUntil=performance.now()+2600;
+  if(rc.alt){G.visit.alt=M.n%2===0?rid:null;}
+  V.dlg={rid,stage:'tone',lines:chatOf(rid)};opener(rid);if(G.visit.alt===rid){V.dlg.lines.push({who:rc.speaker,text:pick(Math.random,rc.alt.intro)});if(Math.random()<.5)V.dlg.lines.push({who:rc.speaker,text:pick(Math.random,rc.alt.lines)});}V.dlg.lines.push({who:rc.speaker,text:g});rx.forEach(t=>V.dlg.lines.push({who:rc.speaker,text:t}));const co=residents(here()).find(o=>o!==rid);if(co&&rc.nb){V.dlg.lines.push({who:rc.speaker,text:pick(Math.random,rc.nb)});meet(co);}G.visit.hailed={};V.talkUntil=performance.now()+2600;
   if(!G.hist[rid])hist(rid,'First contact at '+here().name+'.');
   qEvent('talk',rid).forEach(t=>V.dlg.lines.push({who:t[0]==='"'?rc.speaker:'',text:t}));qStart(rid);
   if(rc.lieSense&&!G.visit.lieChecked){G.visit.lieChecked=1;let fixed=null;for(const o of SB_RACES){const k=G.kn[o.id];if(!k)continue;for(const f in k){if(f==='portrait'||f==='name'||!k[f]||!k[f].r)continue;let t;try{t=truth(o.id,f);}catch(e){continue;}if(t!==undefined&&JSON.stringify(t)!==JSON.stringify(k[f].v)){k[f]={v:t,r:false};fixed=[o,f];break;}}if(fixed)break;}
@@ -1027,7 +1029,7 @@ function trade(kind,id){
   if(kind==='sell'&&rid&&id===rc.taboo){addRep(rid,-6,'offered a taboo good');know(rid,'taboo');toast(rc.short+' are offended: '+RES[id].name+' is taboo to them!','b');sfx('bad');hist(rid,'Offended them by offering '+RES[id].name+'.');commit();return;}
   if(kind==='buy'){if(it.buy==null||G.credits<it.buy||cargoUsed()>=G.cargoMax)return;G.credits-=it.buy;G.cargo[id]=(G.cargo[id]||0)+1;const P=(G.paid=G.paid||{})[id]=G.paid[id]||{q:0,c:0};P.q++;P.c+=it.buy;bumpAdd(s.id,id);}
   else{if(!G.cargo[id])return;if(it.full){toast(FULL_LINE[rid]||'They have plenty of that for now.');V.keepScroll=true;renderAll();V.keepScroll=false;return;}
-    G.cargo[id]--;G.credits+=it.sell;if(G.paid&&G.paid[id]&&G.paid[id].q){const P=G.paid[id];P.c-=P.c/P.q;P.q--;}if(it.dem!=null)demSet(rid,id,it.dem-DEM_DROP);}
+    G.cargo[id]--;{let pay=it.sell;if(G.tithe){if((G.flags&&G.flags.lumEv)||(G.up&&G.up.resist)){G.tithe=0;toast('You see through the Luminae tithe and stop paying it.','g');}else{const cut=Math.max(1,Math.round(pay*.1));pay-=cut;G.titheTotal=(G.titheTotal||0)+cut;toast('Luminae tithe: −¢'+cut+' of this sale.','b');}}G.credits+=pay;}if(G.paid&&G.paid[id]&&G.paid[id].q){const P=G.paid[id];P.c-=P.c/P.q;P.q--;}if(it.dem!=null)demSet(rid,id,it.dem-DEM_DROP);}
   sfx('coin');
   if(rid){tradeLog(rid,kind,id,kind==='buy'?it.buy:it.sell);if(G.visit.tradeRep<5){G.visit.tradeRep++;ripple(rid,1,'trade');}
     if(kind==='sell'&&(rc.wants.includes(id)))know(rid,'wants');
