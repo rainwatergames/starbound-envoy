@@ -1,4 +1,4 @@
-/*! STARBOUND ENVOY v3.2.1 — © 2026 Rainwater Games (Jeff Rainwater). All rights reserved. */
+/*! STARBOUND ENVOY v3.3.0 — © 2026 Rainwater Games (Jeff Rainwater). All rights reserved. */
 'use strict';
 (function(){
 const VERSION='0.2';
@@ -18,7 +18,7 @@ const params=new URLSearchParams(location.search);
 
 /* ---------------- world generation ---------------- */
 function showIntro(){const d=document.createElement('div');d.id='intro';
-  d.innerHTML='<canvas id="introSky"></canvas><div class="itx"><div class="ihd">STARBOUND ENVOY</div><div class="small">TERRAN CONCORD · v3.2.1</div><p>You are an envoy of the Terran Concord, sent from Earth past the last charted star.</p><p>Find the living worlds no one has met. Learn their secrets.</p><p>Bind the galaxy together, one trade route at a time.</p><button class="btn pri" id="introGo">Begin</button><div class="small">tap anywhere to skip</div></div>';
+  d.innerHTML='<canvas id="introSky"></canvas><div class="itx"><div class="ihd">STARBOUND ENVOY</div><div class="small">TERRAN CONCORD · v3.3.0</div><p>You are an envoy of the Terran Concord, sent from Earth past the last charted star.</p><p>Find the living worlds no one has met. Learn their secrets.</p><p>Bind the galaxy together, one trade route at a time.</p><button class="btn pri" id="introGo">Begin</button><div class="small">tap anywhere to skip</div></div>';
   document.body.appendChild(d);const c=d.querySelector('canvas'),x=c.getContext('2d');c.width=innerWidth;c.height=innerHeight;
   const st=[...Array(160)].map(()=>({x:Math.random()*c.width,y:Math.random()*c.height,z:Math.random()*2+.3}));let on=true;
   (function fr(){if(!on)return;x.fillStyle='rgba(3,6,18,.45)';x.fillRect(0,0,c.width,c.height);st.forEach(p=>{p.y+=p.z*.6;if(p.y>c.height){p.y=0;p.x=Math.random()*c.width;}x.fillStyle='rgba(200,225,255,'+(.3+p.z/3)+')';x.fillRect(p.x,p.y,p.z,p.z);});requestAnimationFrame(fr);})();
@@ -152,7 +152,7 @@ const statusView=()=>{const s=here();G.hull=G.hull==null?100:G.hull;G.ls=G.ls==n
    '<div class="cr"><b>CREDITS</b><span class="cv">¢'+G.credits+'</span></div></div>';
   h+='<div class="cxh">CARGO HOLD · '+cargoUsed()+'/'+G.cargoMax+'</div>'+bar(cargoUsed()*100/G.cargoMax,'#7fd0ff');
   const ids=Object.keys(G.cargo).filter(k=>G.cargo[k]>0);
-  h+=ids.length?'<table class="ct"><tr><th>Item</th><th>Qty</th><th>Avg paid</th></tr>'+ids.map(k=>{const P=G.paid&&G.paid[k];return'<tr class="mlink" data-a="mkt" data-v="'+k+'"><td>'+esc(RES[k].name)+'</td><td>'+G.cargo[k]+'</td><td>'+(P&&P.q?'¢'+Math.round(P.c/P.q):'—')+'</td></tr>';}).join('')+'</table>':'<p class="small">Hold empty.</p>';
+  h+=ids.length?'<table class="ct"><tr><th>Item</th><th>Qty</th><th>Avg paid</th></tr>'+ids.map(k=>{const P=G.paid&&G.paid[k];return'<tr class="mlink" data-a="mkt" data-v="'+k+'"><td>'+esc(RES[k].name)+'<br>'+thTag(k)+'</td><td>'+G.cargo[k]+'</td><td>'+(P&&P.q?'¢'+Math.round(P.c/P.q):'—')+'</td></tr>';}).join('')+'</table>':'<p class="small">Hold empty.</p>';
   h+='<div class="cxh">UPGRADES</div><p class="small">'+Object.keys(UPG).map(k=>(G.up[k]?'✓ ':'· ')+esc(UPG[k].n)+(G.up[k]?'':' (not installed)')).join('<br>')+'</p>';
   if(s.port||canRepair(s)){h+='<div class="cxh">DOCKED SERVICES</div>'+refuelBtn()+'<button class="btn" data-a="repair" '+(G.hull>=100||!repairCost()?'disabled':'')+'>🔧 Repair hull'+(G.hull>=100?' · pristine':' · ¢'+repairCost())+'</button>';}
   return h;};
@@ -471,7 +471,13 @@ function renderHud(){
   const o=s.owner&&kn(s.owner).loc&&!kn(s.owner).loc.r?RACE[s.owner].short+' space':(s.port?'Free port':'Uncharted');
   $('cap').textContent=vsMode()==='portrait'?RACE[V.dlg.rid].speaker+' · '+RACE[V.dlg.rid].name:vsMode()==='ship'?(G.enc.name+' · '+G.enc.state):(s.name+' · '+o);
 }
-function renderAll(){ if(!G)return; renderHud(); document.body.classList.toggle('vsoff',!(V.view==='helm'||V.view==='science'||(V.view==='comms'&&V.dlg&&V.dlg.rid))); if(V.markSeen&&V.view!=='missions'){V.markSeen.forEach(([k,v])=>{(G.mseen=G.mseen||{})[k]=v;});V.markSeen=null;} renderStations(); const fn=VIEWS[V.view]; $('panel').innerHTML=fn(); $('panel').scrollTop=V.keepScroll?$('panel').scrollTop:0; afterRender(); }
+const TIPS={helm:'Tap any star to plot a course. The route shows distance and fuel before you jump.',science:'Survey scans are free. Deep scans cost fuel and credits but reveal much more. During an encounter, scan the ship here.',comms:'Hail to talk. Your opening tone matters: each race likes different approaches.',trade:'Buy low, sell where it is wanted. Prices you see are saved in Market Research.',market:'Only prices you have seen are listed, with how old they are.',tactical:'Encounters are never a game over. Talking first often works best.',status:'Tap a cargo item to look it up in Market Research.',missions:'Favors and quests you accept appear here.',log:'Everything you learn about each species is filed here. Add your own notes too.'};
+function prefs(){try{return JSON.parse(localStorage.getItem('sbe.prefs')||'{}');}catch(e){return{};}}
+function setPref(k,v){const p=prefs();p[k]=v;localStorage.setItem('sbe.prefs',JSON.stringify(p));}
+function tipHtml(v){const p=prefs();if(p.tipsOff||!TIPS[v]||(p.seen||{})[v]||!G.slot&&!V.tipsTest)return'';const s=p.seen||{};s[v]=1;setPref('seen',s);return'<div class="tip"><b>Tip</b> '+esc(TIPS[v])+'<button data-a="tipx" aria-label="Dismiss">Got it</button></div>';}
+function applyTextSize(){const z={n:1,l:1.15,xl:1.3}[prefs().ts||'n']||1;document.documentElement.style.setProperty('--tz',z);document.body.dataset.ts=prefs().ts||'n';}
+function noteBox(key){const t=(G.pnotes||{})[key]||'';return'<h3 class="cxh">MY NOTES</h3><textarea class="pnote" data-note="'+esc(key)+'" rows="3" maxlength="600" placeholder="Write your own notes here. Saved automatically.">'+esc(t)+'</textarea>';}
+function renderAll(){ if(!G)return; renderHud(); document.body.classList.toggle('vsoff',!(V.view==='helm'||V.view==='science'||(V.view==='comms'&&V.dlg&&V.dlg.rid))); if(V.markSeen&&V.view!=='missions'){V.markSeen.forEach(([k,v])=>{(G.mseen=G.mseen||{})[k]=v;});V.markSeen=null;} renderStations(); const fn=VIEWS[V.view]; $('panel').innerHTML=tipHtml(V.view)+fn(); $('panel').scrollTop=V.keepScroll?$('panel').scrollTop:0; afterRender(); }
 function afterRender(){ if(V.view==='helm'){drawMap();const c=$('map'),pn=$('panel');if(c&&pn&&(V.mapAt!==G.loc||V.mapFocus!=null)){V.mapAt=G.loc;const fy=V.mapFocus!=null?sys(V.mapFocus).y:here().y;V.mapFocus=null;const y=12+fy*(c.clientHeight-24);const cr=c.getBoundingClientRect(),pr=pn.getBoundingClientRect();pn.scrollTop=Math.max(0,pn.scrollTop+cr.top-pr.top+y-pn.clientHeight/2);}} const c=$('chat');if(c)c.scrollTop=c.scrollHeight; }
 function raceName(rid){const k=kn(rid);return k.name?RACE[rid].short+(k.name.r?' (rumored)':''):'Unknown species';}
 function fieldHtml(rid,f,fmt){const k=kn(rid)[f];if(!k)return UNK;return esc(fmt(k.v))+(k.r?'<span class="tag">rumored</span>':'');}
@@ -499,7 +505,7 @@ VIEWS.science=()=>{
   else if(!s.port)h+='<b>Inhabitants</b><span>None. '+(s.scan>=2?(s.looted?'Salvage recovered.':'Deep scan complete.'):'A deep scan may find ruins, derelicts or old signals.')+'</span>';
   else if(s.port)h+='<b>Inhabitants</b><span>Mixed traders, free port</span>';
   else h+='<b>Inhabitants</b><span>None detected</span>';
-  h+='</div>';
+  h+='</div>'+noteBox('p:'+s.id);
   if(s.scan<2){h+='<p class="small">A deep scan sweeps subspace chatter, buried ruins and encrypted traffic: true stock, defenses, distress calls, salvage and coordinates (3 fuel + ¢'+(G.up&&G.up.scanner?SCAN_CR/2:SCAN_CR)+' in probe drones).</p><button class="btn pri" data-a="scan2">Run deep scan</button>';}
   else h+='<p class="small">Deep scan complete. Findings are in your Computer Log.</p>'+(V.lastScan?'<div class="say">'+V.lastScan.map(esc).join('<br>')+'</div>':'');
   return h;
@@ -558,11 +564,21 @@ VIEWS.trade=()=>{
     h+='<div class="row"><span class="n">'+r.icon+' '+esc(r.name)+(it.tag?'<span class="tag '+(it.tag==='wanted'?'w':'')+'">'+it.tag+'</span>':'')+(it.dem!=null&&it.tag==='wanted'?'<span class="dl'+(it.full?' sat':'')+'">'+demLabel(it.dem)+'</span>':'')+'</span><span class="q">'+have+'</span>'+
     '<button data-a="buy" data-v="'+it.id+'" '+(it.buy==null||G.credits<it.buy||cargoUsed()>=G.cargoMax?'disabled':'')+'>'+(it.buy==null?'—':'¢'+it.buy)+'</button>'+
     '<button data-a="sell" data-v="'+it.id+'" '+(!have?'disabled':'')+'>'+(it.full?'Full':'¢'+it.sell)+'</button></div>';});
+  if(Object.values(G.cargo).some(q=>q>0))h+='<button class="btn" data-a="sellbest">Sell all where it\'s best here <span class="small">(this station\'s prices now)</span></button>';
   if(favorCount())h+=cargoTable();
   if(m.items.some(x=>x.full))h+='<p class="small">'+esc(FULL_LINE[act(here())]||'')+'</p>';
   h+='<p class="small">Wanted goods fetch less as a market fills up; demand recovers a little with every warp jump.</p>';
   return h;
 };
+/* v3.3 Trade Helper: best observed buyer vs what you paid */
+function thBest(k){const b=mListings(k).buy[0];if(!b)return null;const P=G.paid&&G.paid[k],cost=P&&P.q?P.c/P.q:null;return{b,m:cost==null?null:Math.round(b.price-cost)};}
+function thTag(k){const t=thBest(k);if(!t)return'<span class="th none">no buyer seen yet</span>';const nm=G.systems[t.b.sid].name,age=t.b.age<=0?'seen this turn':'seen '+t.b.age+' turn'+(t.b.age>1?'s':'')+' ago';
+  return'<span class="th'+(t.m!=null&&t.m<0?' neg':'')+'">'+(t.m==null?'sells ¢'+t.b.price:'sells '+(t.m>=0?'+':'−')+'¢'+Math.abs(t.m))+' at '+esc(nm)+' ('+age+(t.b.age>=3?', may be outdated':'')+')</span>';}
+function sellBestHere(){const s=here(),m=market();if(!m||m.refuse)return;let n=0,c0=G.credits;
+  Object.keys(G.cargo).filter(k=>G.cargo[k]>0).forEach(k=>{const it=m.items.find(x=>x.id===k);if(!it||it.full||it.sell==null)return;
+    const other=mListings(k).buy.filter(x=>x.sid!==s.id)[0];if(other&&other.price>it.sell)return;
+    let guard=99;while(G.cargo[k]>0&&guard--){const q=G.cargo[k];const m2=market(),i2=m2.items.find(x=>x.id===k);if(!i2||i2.full)break;trade('sell',k);if(G.cargo[k]===q)break;n++;}});
+  toast(n?'Sold '+n+' unit'+(n>1?'s':'')+' here for ¢'+(G.credits-c0)+' at today\'s prices.':'Nothing in your hold sells best here.',n?'g':'');V.keepScroll=true;renderAll();V.keepScroll=false;}
 /* v3.2 Market Research: only what the player has observed or heard */
 function mObserve(s,m){if(!m||m.refuse||!m.items)return;const O=(G.mobs=G.mobs||{});const rid=s.port?null:act(s);const it={};m.items.forEach(x=>{it[x.id]={buy:x.buy,sell:x.full?null:x.sell};});O[s.id]={turn:G.turn,rid,items:it};}
 function mLeads(){const out=[];(G.leads||[]).forEach(l=>{Object.keys(RES).forEach(id=>{if(l.text.toLowerCase().replace(/[^a-z]/g,'').includes(RES[id].name.toLowerCase().replace(/[^a-z]/g,'')))out.push({id,rid:l.rid,turn:l.turn,text:l.text});});});
@@ -656,6 +672,7 @@ function logEntry(id){
   h+='<b>Planet has</b><span>'+fieldHtml(id,'rich',resList)+'</span>';
   h+='<b>Hidden want</b><span>'+fieldHtml(id,'secret',v=>RES[v].icon+' '+RES[v].name)+'</span>';
   h+='<b>Taboo good</b><span>'+fieldHtml(id,'taboo',v=>RES[v].icon+' '+RES[v].name)+'</span></div>';
+  h+=noteBox('r:'+id);
   h+='<h3 class="cxh">LORE</h3><div class="kv">'+loreRows(id)+'</div>';
   h+='<h3 class="cxh">ALLIES</h3><div class="cxl">'+relRows(id,'allies')+'</div><h3 class="cxh">ENEMIES</h3><div class="cxl">'+relRows(id,'enemies')+'</div>';
   // notes
@@ -1256,7 +1273,7 @@ document.addEventListener('pointerdown',()=>{audioInit();if(AU.ctx&&AU.ctx.state
 $('stations').addEventListener('click',e=>{const b=e.target.closest('[data-st]');if(!b)return;V.view=b.dataset.st;V.logSel=null;V.logFrom=null;sfx('tap');
   if(V.view==='comms'&&!V.dlg&&here().owner&&G.visit.hailed)hail(act(here()));
   renderAll();});
-$('panel').addEventListener('input',e=>{if(e.target.id!=='mq')return;V.mq=e.target.value;renderAll();const i=$('mq');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}});
+$('panel').addEventListener('input',e=>{if(e.target.dataset&&e.target.dataset.note!=null){(G.pnotes=G.pnotes||{})[e.target.dataset.note]=e.target.value.slice(0,600);save();return;}if(e.target.id!=='mq')return;V.mq=e.target.value;renderAll();const i=$('mq');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}});
 $('panel').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b||b.disabled)return;const a=b.dataset.a,v=b.dataset.v;sfx('tap');
   switch(a){
     case 'warp':warpTo(V.sel);break;
@@ -1273,7 +1290,7 @@ $('panel').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(
     case 'refuel':refuel();break;case 'repair':repair();break;case 'upg':buyUpg(v);break;case 'mapgo':V.logFrom=null;V.logSel=null;V.sel=+v;V.mapAt=null;V.mapFocus=+v;V.view='helm';renderAll();break;
     case 'fav-yes':favorAnswer(true);break;case 'fav-no':favorAnswer(false);break;case 'fav-give':deliverFavor(v);break;
     case 'tac':tac(v);break;
-    case 'pzoom':{const o=document.createElement('div');o.id='pz';o.innerHTML='<img src="'+b.getAttribute('src')+'" alt=""><span>Tap to close</span>';o.onclick=()=>o.remove();document.body.appendChild(o);break;}case 'confront':confront();break;case 'press':pressRelease();break;case 'escan':doShipScan();break;case 'hackask':V.hackAsk=1;renderAll();break;case 'hackno':V.hackAsk=0;renderAll();break;case 'hackgo':V.hackAsk=0;doHack();break;
+    case 'pzoom':{const o=document.createElement('div');o.id='pz';o.innerHTML='<img src="'+b.getAttribute('src')+'" alt=""><span>Tap to close</span>';o.onclick=()=>o.remove();document.body.appendChild(o);break;}case 'tipx':{const e=b.closest('.tip');if(e)e.remove();break;}case 'sellbest':sellBestHere();break;case 'confront':confront();break;case 'press':pressRelease();break;case 'escan':doShipScan();break;case 'hackask':V.hackAsk=1;renderAll();break;case 'hackno':V.hackAsk=0;renderAll();break;case 'hackgo':V.hackAsk=0;doHack();break;
     case 'hail-enc':hailEnc();commit();break;
     case 'enc-tac':encTac(v);break;
     case 'enc-close':G.enc=null;V.dlg=null;V.view='helm';commit();break;
@@ -1297,12 +1314,15 @@ function slotPicker(mode){
 }
 function introToast(){toast('Captain, you command the envoy ship. Explore, listen, and make friends (or not).','g');}
 $('tContinue').onclick=()=>{sfx('tap');const n=lastSlot();if(n){G=migrate(readSlot(n));G.slot=n;startPlaying();}};
+applyTextSize();addEventListener('pagehide',()=>{try{save();}catch(e){}});document.addEventListener('visibilitychange',()=>{if(document.hidden)try{save();}catch(e){}});
 $('tNew').onclick=()=>{sfx('tap');slotPicker('new');};
 $('tLoad').onclick=()=>{sfx('tap');slotPicker('load');};
 $('menuBtn').onclick=()=>{sfx('tap');if(SB.state!=='play')return;
-  modal('<h3>Ship menu</h3><p class="small">Autosaves after every action to slot '+(G.slot||'— (test mode)')+'.</p><button class="btn" data-m="snd">Sound: '+(AU.on?'On':'Off')+'</button><button class="btn" data-m="load">Load game</button><button class="btn" data-m="title">Save &amp; return to title</button><button class="btn pri" data-m="x">Resume</button>');
+  modal('<h3>Ship menu</h3><p class="small">Autosaves after every action to slot '+(G.slot||'— (test mode)')+'.</p><button class="btn" data-m="snd">Sound: '+(AU.on?'On':'Off')+'</button><button class="btn" data-m="tips">Tutorial tips: '+(prefs().tipsOff?'Off':'On')+'</button><button class="btn" data-m="ts">Text size: '+({n:'Normal',l:'Large',xl:'Extra Large'}[prefs().ts||'n'])+'</button><button class="btn" data-m="load">Load game</button><button class="btn" data-m="title">Save &amp; return to title</button><button class="btn pri" data-m="x">Resume</button>');
   $('modal').onclick=e=>{const b=e.target.closest('button');if(!b)return;const m=b.dataset.m;sfx('tap');
     if(m==='snd'){setSound(!AU.on);b.textContent='Sound: '+(AU.on?'On':'Off');return;}
+    if(m==='tips'){setPref('tipsOff',!prefs().tipsOff);b.textContent='Tutorial tips: '+(prefs().tipsOff?'Off':'On');return;}
+    if(m==='ts'){const o=['n','l','xl'],c=prefs().ts||'n',nx=o[(o.indexOf(c)+1)%3];setPref('ts',nx);applyTextSize();b.textContent='Text size: '+{n:'Normal',l:'Large',xl:'Extra Large'}[nx];renderAll();return;}
     if(m==='load'){slotPicker('load');return;}
     if(m==='title'){save();$('modal').classList.add('hide');showTitle();return;}
     $('modal').classList.add('hide');};};
@@ -1330,5 +1350,5 @@ resize();requestAnimationFrame(loop);
 if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!params.get('test'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 const tm=params.get('test');
 if(tm)testSetup(tm);else showTitle();
-SB.api={doShipScan,doHack,hackRisk,rollAnom,confront,pressRelease,anomFound,knownShips,shipLearn,markSpoke,sawRaces,spawnEncounter,hailEnc,encTac,spoke,metRaces,note,friendlyTow,missions,missionBadgeCount,addLead,lifeTick,warpTo,arrive,foundCount,milestones,damage,repair,buyUpg,qEvent,qStart,market,fuelCost,bribeCost,yardHtml,tier,greetFor,reactLines,processGossip,gossip,leverTarget,contraSource,tipTarget,know,kn,meet,hist,addRep,mem,relOf,truth,lies,V:()=>V,special,demOf,favs,favorAnswer,deliverFavor,newGame,warpTo,scan,hail,chooseTone,topic,trade,tac,spawnEncounter,renderAll,save,readSlot,testSetup,setView:v=>{V.view=v;renderAll();}};
+SB.api={sellBestHere,thTag,prefs,setPref,doShipScan,doHack,hackRisk,rollAnom,confront,pressRelease,anomFound,knownShips,shipLearn,markSpoke,sawRaces,spawnEncounter,hailEnc,encTac,spoke,metRaces,note,friendlyTow,missions,missionBadgeCount,addLead,lifeTick,warpTo,arrive,foundCount,milestones,damage,repair,buyUpg,qEvent,qStart,market,fuelCost,bribeCost,yardHtml,tier,greetFor,reactLines,processGossip,gossip,leverTarget,contraSource,tipTarget,know,kn,meet,hist,addRep,mem,relOf,truth,lies,V:()=>V,special,demOf,favs,favorAnswer,deliverFavor,newGame,warpTo,scan,hail,chooseTone,topic,trade,tac,spawnEncounter,renderAll,save,readSlot,testSetup,setView:v=>{V.view=v;renderAll();}};
 })();
