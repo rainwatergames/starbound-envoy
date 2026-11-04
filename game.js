@@ -1,4 +1,4 @@
-/*! STARBOUND ENVOY v3.1.1 — © 2026 Rainwater Games (Jeff Rainwater). All rights reserved. */
+/*! STARBOUND ENVOY v3.2.0 — © 2026 Rainwater Games (Jeff Rainwater). All rights reserved. */
 'use strict';
 (function(){
 const VERSION='0.2';
@@ -18,7 +18,7 @@ const params=new URLSearchParams(location.search);
 
 /* ---------------- world generation ---------------- */
 function showIntro(){const d=document.createElement('div');d.id='intro';
-  d.innerHTML='<canvas id="introSky"></canvas><div class="itx"><div class="ihd">STARBOUND ENVOY</div><div class="small">TERRAN CONCORD · v3.1.1</div><p>You are an envoy of the Terran Concord, sent from Earth past the last charted star.</p><p>Find the living worlds no one has met. Learn their secrets.</p><p>Bind the galaxy together, one trade route at a time.</p><button class="btn pri" id="introGo">Begin</button><div class="small">tap anywhere to skip</div></div>';
+  d.innerHTML='<canvas id="introSky"></canvas><div class="itx"><div class="ihd">STARBOUND ENVOY</div><div class="small">TERRAN CONCORD · v3.2.0</div><p>You are an envoy of the Terran Concord, sent from Earth past the last charted star.</p><p>Find the living worlds no one has met. Learn their secrets.</p><p>Bind the galaxy together, one trade route at a time.</p><button class="btn pri" id="introGo">Begin</button><div class="small">tap anywhere to skip</div></div>';
   document.body.appendChild(d);const c=d.querySelector('canvas'),x=c.getContext('2d');c.width=innerWidth;c.height=innerHeight;
   const st=[...Array(160)].map(()=>({x:Math.random()*c.width,y:Math.random()*c.height,z:Math.random()*2+.3}));let on=true;
   (function fr(){if(!on)return;x.fillStyle='rgba(3,6,18,.45)';x.fillRect(0,0,c.width,c.height);st.forEach(p=>{p.y+=p.z*.6;if(p.y>c.height){p.y=0;p.x=Math.random()*c.width;}x.fillStyle='rgba(200,225,255,'+(.3+p.z/3)+')';x.fillRect(p.x,p.y,p.z,p.z);});requestAnimationFrame(fr);})();
@@ -32,12 +32,9 @@ function newGame(slot,seed){
   const names=shuffle(r,SB_SYSNAMES).slice(0,solo.length+NEMPTY);
   const pts=[];
   const all=[...SB_PORTS.map(n=>({name:n,port:true})),...names.map(n=>({name:n}))];
-  const ROWS=Math.ceil(all.length/3),dy=.97/ROWS;
-  const cells=[];for(let rw=0;rw<ROWS;rw++)for(let c=0;c<3;c++)cells.push([c,rw]);
-  const ci=cells.findIndex(([c,rw])=>c===1&&rw===Math.floor(ROWS/2));const order=[cells[ci],...shuffle(r,cells.filter((_,i)=>i!==ci))];
-  all.forEach((s,i)=>{const [c,rw]=order[i];
-    pts.push({x:.05+c*.33+(rw%2?.06:0)+(r()-.5)*.03,y:.015+rw*dy+(r()-.5)*dy*.28});
-  });
+  // v3.2: fixed organic layout (same every game): clusters, voids, min spacing
+  const LP=organicLayout(all.length);const order=[0,...shuffle(r,LP.map((_,i)=>i).slice(1))];
+  all.forEach((s,i)=>pts.push(LP[order[i]]));
   const systems=all.map((s,i)=>({id:i,name:s.name,port:!!s.port,x:pts[i].x,y:pts[i].y,
     type:s.port?'station':pick(r,SB_PTYPES),owner:null,rich:[],scan:0,derelict:false,tex:Math.floor(r()*1e9)}));
   const worlds=shuffle(r,systems.filter(s=>!s.port&&s.id!==0).map(s=>s.id));
@@ -155,7 +152,7 @@ const statusView=()=>{const s=here();G.hull=G.hull==null?100:G.hull;G.ls=G.ls==n
    '<div class="cr"><b>CREDITS</b><span class="cv">¢'+G.credits+'</span></div></div>';
   h+='<div class="cxh">CARGO HOLD · '+cargoUsed()+'/'+G.cargoMax+'</div>'+bar(cargoUsed()*100/G.cargoMax,'#7fd0ff');
   const ids=Object.keys(G.cargo).filter(k=>G.cargo[k]>0);
-  h+=ids.length?'<table class="ct"><tr><th>Item</th><th>Qty</th><th>Avg paid</th></tr>'+ids.map(k=>{const P=G.paid&&G.paid[k];return'<tr><td>'+esc(RES[k].name)+'</td><td>'+G.cargo[k]+'</td><td>'+(P&&P.q?'¢'+Math.round(P.c/P.q):'—')+'</td></tr>';}).join('')+'</table>':'<p class="small">Hold empty.</p>';
+  h+=ids.length?'<table class="ct"><tr><th>Item</th><th>Qty</th><th>Avg paid</th></tr>'+ids.map(k=>{const P=G.paid&&G.paid[k];return'<tr class="mlink" data-a="mkt" data-v="'+k+'"><td>'+esc(RES[k].name)+'</td><td>'+G.cargo[k]+'</td><td>'+(P&&P.q?'¢'+Math.round(P.c/P.q):'—')+'</td></tr>';}).join('')+'</table>':'<p class="small">Hold empty.</p>';
   h+='<div class="cxh">UPGRADES</div><p class="small">'+Object.keys(UPG).map(k=>(G.up[k]?'✓ ':'· ')+esc(UPG[k].n)+(G.up[k]?'':' (not installed)')).join('<br>')+'</p>';
   if(s.port||canRepair(s)){h+='<div class="cxh">DOCKED SERVICES</div>'+refuelBtn()+'<button class="btn" data-a="repair" '+(G.hull>=100||!repairCost()?'disabled':'')+'>🔧 Repair hull'+(G.hull>=100?' · pristine':' · ¢'+repairCost())+'</button>';}
   return h;};
@@ -246,7 +243,7 @@ function save(){ if(!G||!G.slot)return; G.savedAt=Date.now();
   try{localStorage.setItem(SK(G.slot),JSON.stringify(G));localStorage.setItem('sbe.last',String(G.slot));}catch(e){} }
 function readSlot(n){try{const s=localStorage.getItem(SK(n));return s?JSON.parse(s):null;}catch(e){return null;}}
 // old saves (pre-0.2) lack newer races: give each a fresh home system in a free spot of the map
-function migrate(g0){if(!g0||!g0.systems)return g0;const r=rng((g0.seed||1)+77);const used=new Set(g0.systems.map(s=>s.name));
+function migrate(g0){if(!g0||!g0.systems)return g0;if(!g0.spoke){g0.spoke={};Object.keys(g0.hist||{}).forEach(r=>{if((g0.hist[r]||[]).some(x=>/Opened talks|Spoke with them over comms/.test(x)))g0.spoke[r]=1;});}const r=rng((g0.seed||1)+77);const used=new Set(g0.systems.map(s=>s.name));
   SB_RACES.forEach(rc=>{if(g0.races[rc.id])return;if(rc.cohab&&g0.races[rc.cohab]){const hs=g0.systems[g0.races[rc.cohab].home];if(hs&&!hs.co){hs.co=rc.id;g0.races[rc.id]={home:hs.id,tech:clamp(rc.techBase+Math.round((r()-.5)*2),1,5),rep:0};SB_RELATIONS.forEach(([a,b,v])=>{if(a===rc.id||b===rc.id)g0.rel[pk(a,b)]=v;});SB_RACES.forEach(o=>{if(o.friendAll&&o.id!==rc.id)g0.rel[pk(o.id,rc.id)]=1;});return;}}let x,y,best=null,bd=-1;for(let t=0;t<300;t++){x=.08+r()*.84;y=.07+r()*.86;const d=Math.min(...g0.systems.map(s=>Math.hypot(s.x-x,s.y-y)));if(d>bd){bd=d;best=[x,y];}}
     const name=SB_SYSNAMES.find(n=>!used.has(n))||(rc.short+' Prime');used.add(name);const pool=SB_RES.map(z=>z.id).filter(z=>!rc.wants.includes(z)&&z!==rc.taboo&&z!==rc.secretWant);
     const s={id:g0.systems.length,name,port:false,x:best[0],y:best[1],type:pick(r,SB_PTYPES),owner:rc.id,rich:shuffle(r,pool).slice(0,3),scan:0,derelict:false,tex:Math.floor(r()*1e9)};g0.systems.push(s);
@@ -428,7 +425,7 @@ function loop(now){
   const t=(now-T0)/1000;
   cx.setTransform(DPR,0,0,DPR,0,0);
   drawBridge(t);
-  const R=vsRect();
+  const R=vsRect();if(R.h<4)return;cx.save();cx.globalAlpha=Math.min(1,R.h/120);
   frameVS(R,t);
   const mode=vsMode();
   if(mode==='warp'){drawStars(R,t,2.4);}
@@ -447,7 +444,7 @@ function loop(now){
       if(V.scanUntil>performance.now()){const k=1-(V.scanUntil-performance.now())/1500;cx.strokeStyle='rgba(120,255,200,.7)';cx.lineWidth=2;const yy=py+D*k;cx.beginPath();cx.moveTo(px,yy);cx.lineTo(px+D,yy);cx.stroke();cx.fillStyle='rgba(120,255,200,.08)';cx.fillRect(px,py,D,D*k);}
     }
   }
-  frameEnd(R,t);
+  frameEnd(R,t);cx.restore();
 }
 function drawStation(x,y,t){cx.save();cx.translate(x,y);cx.rotate(t*.2);cx.strokeStyle='#cfd8ef';cx.lineWidth=3;cx.beginPath();cx.ellipse(0,0,26,26,0,0,7);cx.stroke();
   for(let i=0;i<4;i++){cx.rotate(Math.PI/2);cx.beginPath();cx.moveTo(0,0);cx.lineTo(26,0);cx.stroke();}cx.fillStyle='#ffcf6a';cx.fillRect(-5,-5,10,10);cx.restore();}
@@ -464,7 +461,7 @@ function toast(msg,kind){const el=document.createElement('div');el.className='to
   while(box.children.length>4)box.removeChild(box.firstChild);setTimeout(()=>el.remove(),3600);}
 function cargoUsed(){return Object.values(G.cargo).reduce((a,b)=>a+b,0)+(G.favors?G.favors.filter(f=>f.state==='open').length:0);}
 function commit(){ save(); renderAll(); }
-const STATIONS=[['helm','Helm','✦'],['science','Science','◎'],['comms','Comms','☏'],['trade','Trade','⇄'],['tactical','Tactical','⚔'],['status','Status','⚙'],['missions','Missions','☰'],['log','Log','▤']];
+const STATIONS=[['helm','Helm','✦'],['science','Science','◎'],['comms','Comms','☏'],['trade','Trade','⇄'],['market','Market','¢'],['tactical','Tactical','⚔'],['status','Status','⚙'],['missions','Missions','☰'],['log','Log','▤']];
 function renderStations(){
   $('stations').innerHTML=STATIONS.map(([id,l,i])=>'<button class="sb'+(V.view===id?' on':'')+(id==='tactical'&&G.enc&&G.enc.state==='active'?' alert':'')+'" data-st="'+id+'"><i>'+i+'</i>'+l+(id==='missions'&&missionBadgeCount()?'<em class="sbb">'+missionBadgeCount()+'</em>':'')+'</button>').join('');
 }
@@ -474,7 +471,7 @@ function renderHud(){
   const o=s.owner&&kn(s.owner).loc&&!kn(s.owner).loc.r?RACE[s.owner].short+' space':(s.port?'Free port':'Uncharted');
   $('cap').textContent=vsMode()==='portrait'?RACE[V.dlg.rid].speaker+' · '+RACE[V.dlg.rid].name:vsMode()==='ship'?(G.enc.name+' · '+G.enc.state):(s.name+' · '+o);
 }
-function renderAll(){ if(!G)return; renderHud(); if(V.markSeen&&V.view!=='missions'){V.markSeen.forEach(([k,v])=>{(G.mseen=G.mseen||{})[k]=v;});V.markSeen=null;} renderStations(); const fn=VIEWS[V.view]; $('panel').innerHTML=fn(); $('panel').scrollTop=V.keepScroll?$('panel').scrollTop:0; afterRender(); }
+function renderAll(){ if(!G)return; renderHud(); document.body.classList.toggle('vsoff',!(V.view==='helm'||V.view==='science'||(V.view==='comms'&&V.dlg&&V.dlg.rid))); if(V.markSeen&&V.view!=='missions'){V.markSeen.forEach(([k,v])=>{(G.mseen=G.mseen||{})[k]=v;});V.markSeen=null;} renderStations(); const fn=VIEWS[V.view]; $('panel').innerHTML=fn(); $('panel').scrollTop=V.keepScroll?$('panel').scrollTop:0; afterRender(); }
 function afterRender(){ if(V.view==='helm'){drawMap();const c=$('map'),pn=$('panel');if(c&&pn&&(V.mapAt!==G.loc||V.mapFocus!=null)){V.mapAt=G.loc;const fy=V.mapFocus!=null?sys(V.mapFocus).y:here().y;V.mapFocus=null;const y=12+fy*(c.clientHeight-24);const cr=c.getBoundingClientRect(),pr=pn.getBoundingClientRect();pn.scrollTop=Math.max(0,pn.scrollTop+cr.top-pr.top+y-pn.clientHeight/2);}} const c=$('chat');if(c)c.scrollTop=c.scrollHeight; }
 function raceName(rid){const k=kn(rid);return k.name?RACE[rid].short+(k.name.r?' (rumored)':''):'Unknown species';}
 function fieldHtml(rid,f,fmt){const k=kn(rid)[f];if(!k)return UNK;return esc(fmt(k.v))+(k.r?'<span class="tag">rumored</span>':'');}
@@ -483,7 +480,7 @@ const raceList=a=>a.length?a.map(x=>kn(x).name?RACE[x].short:'an unknown species
 
 /* ---------------- views ---------------- */
 const VIEWS={};
-VIEWS.status=statusView;VIEWS.missions=missionView;
+VIEWS.status=statusView;VIEWS.market=marketView;VIEWS.missions=missionView;
 VIEWS.helm=()=>{
   const s=V.sel!=null?sys(V.sel):null;let h='<h2>HELM · GALAXY MAP</h2><canvas class="map" id="map"></canvas>';
   if(s&&s.id!==G.loc){const d=dist(G.loc,s.id),cost=fuelCost(d);
@@ -495,7 +492,7 @@ VIEWS.helm=()=>{
   return h;
 };
 VIEWS.science=()=>{
-  const s=here();let h='<h2>SCIENCE · '+esc(s.name.toUpperCase())+'</h2>';
+  const s=here();let h='<h2>SCIENCE · '+esc(s.name.toUpperCase())+'</h2>'+encScienceHtml();
   if(s.scan<1){h+='<p>Planetary sensors ready. A survey scan reveals the world, its inhabitants and its richest resources.</p><button class="btn pri" data-a="scan1">Run survey scan</button>';return h;}
   h+='<div class="kv"><b>World type</b><span>'+cap(s.type)+'</span><b>Rich in</b><span>'+resList(s.rich)+'</span>';
   if(s.owner)residents(s).forEach(o=>{const st=G.races[o];h+='<b>Inhabitants</b><span>'+esc(RACE[o].name)+'</span><b>Tech level</b><span>'+TECH_NAMES[st.tech]+' ('+st.tech+'/5) — '+techCompare(st.tech)+'</span>';});
@@ -509,7 +506,7 @@ VIEWS.science=()=>{
 };
 VIEWS.comms=()=>{
   const s=here();const D=V.dlg;
-  if(G.enc&&G.enc.state==='active'&&!D)return'<h2>COMMS</h2><p>An armed vessel, the <b>'+esc(G.enc.name)+'</b>, is on an intercept course.</p><button class="btn pri" data-a="go-tactical">Go to Tactical</button>';
+  if(G.enc&&G.enc.state==='active'&&!D)return'<h2>COMMS</h2><p>An armed vessel, the <b>'+esc(G.enc.name)+'</b>, is on an intercept course.</p>'+(RACE[G.enc.race]?'<button class="btn pri" data-a="hail-enc">Hail the '+esc(G.enc.name)+'</button><button class="btn" data-a="go-tactical">Go to Tactical</button>':'<button class="btn pri" data-a="go-tactical">Go to Tactical</button>');
   if(!D){
     if(!s.owner)return'<h2>COMMS</h2><p>'+(s.port?'Port control waves you through: "Welcome to '+esc(s.name)+', Captain. Trade and fuel are open."':'Only static and distant pulsar chirps. Nobody here to hail.')+'</p>'+(s.port?'<button class="btn" data-a="port-rumor">Buy a drink and listen for rumors</button>':'');
     if(s.co)return'<h2>COMMS</h2><p>A shared world: two peoples answer on this planet\'s channels.</p>'+residents(s).map((o,i)=>'<button class="btn'+(i?'':' pri')+'" data-a="hail" data-v="'+o+'">Hail '+(kn(o).name?'the <b>'+esc(RACE[o].short)+'</b>':'channel '+(i+1))+'</button>').join('');
@@ -518,16 +515,23 @@ VIEWS.comms=()=>{
   const rc=RACE[D.rid];let h='<h2 class="ch">COMMS · '+esc(rc.short.toUpperCase())+'<button class="hlog" data-a="dlgmis">☰</button><button class="hlog" data-a="dlgstat">⚙</button><button class="hlog" data-a="dlglog">▤ Log</button></h2>';
   h+='<div id="chat">'+D.lines.map(l=>l.me?'<div class="bub me">'+(l.tone?'<span class="tone">'+esc(l.tone)+'</span>':'')+esc(l.text)+'</div>':
     l.who?'<div class="bub them"><span class="who">'+esc(l.who)+'</span>'+esc(trx(l.text))+'</div>':'<div class="bub note">'+esc(l.text)+'</div>').join('')+'</div>';
-  if(D.stage==='tone'){SB_TONES.forEach(tn=>{h+='<button class="btn" data-a="tone" data-v="'+tn.id+'"><span class="tone">'+tn.label+'</span>'+esc(tn.line)+'</button>';});}
+  if(D.stage==='enc'){const E=G.enc;
+    if(E&&E.state==='active'){(E.race==='glb'?[['brush','Gentle','Nudge them aside with a tractor beam'],['swat','Swat','Flick them away with a shield pulse'],['ignore','Calm','Ignore them and sip your tea']]:[['scare','Firm','"Please move along, friends."'],['spare','Mercy','Disable their weapons, then let them go'],['loot','Bully','Disable their engines and loot the hold'],['ignore','Calm','Ignore them']]).forEach(([v,t,l])=>{h+='<button class="btn'+(v==='loot'?' warn':'')+'" data-a="enc-tac" data-v="'+v+'"><span class="tone">'+t+'</span>'+esc(l)+'</button>';});
+      if(D.rescue)h+='<button class="btn pri" data-a="press"><span class="tone">Demand</span>"Release them to us. Now."</button>';
+      else if(anomFound(E)&&!E.confronted)h+='<button class="btn pri" data-a="confront"><span class="tone">Confront</span>'+esc(confrontLabel(E))+(anomFound(E)==='hack'?' <span class="small">· reveals your hack</span>':'')+'</button>';}
+    else h+='<button class="btn pri" data-a="enc-close">Close channel</button>';
+    return h;}
+  if(D.stage==='tone'){toneSet(D.rid).forEach(tn=>{h+='<button class="btn" data-a="tone" data-v="'+tn.id+'"><span class="tone">'+tn.label+'</span>'+esc(tn.line)+'</button>';});}
   else if(false){h+='<p class="small">Reward: '+favorRewardText(D.offer)+' · takes 1 hold slot · no time limit</p><button class="btn pri" data-a="fav-yes">"Happy to help."</button><button class="btn" data-a="fav-no">"Not this time."</button>';}
   else if(D.stage==='special'){rc.special.options.forEach((o,i)=>{h+='<button class="btn" data-a="spec" data-v="'+i+'">'+esc(o.t)+'</button>';});}
   else{
     const T=G.visit.topics;
-    if(!T.needs)h+='<button class="btn" data-a="topic" data-v="needs">"What do your people need?"</button>';
-    if(!T.politics)h+='<button class="btn" data-a="topic" data-v="politics">"Who are your friends, and your rivals?"</button>';
-    if(!T.region)h+='<button class="btn" data-a="topic" data-v="region">"What news from the region?"</button>';
-    if(!T.special)h+='<button class="btn" data-a="topic" data-v="special">"Is there anything we can do for each other?"</button>';
-    if(rc.nemesis&&rc.intel&&!T.intel&&kn(rc.nemesis).name)h+='<button class="btn pri" data-a="topic" data-v="intel"><span class="tone">Intel</span>'+esc(rc.intel.ask)+' ('+esc(intelGrade(intelScore(rc.nemesis)-intelSold(D.rid)))+')</button>';
+    {const nq=((G.visit.news||{})[D.rid]||[]).length;h+='<button class="btn" data-a="topic" data-v="news">"Any news?"'+(nq?' <span class="tone">'+nq+' new</span>':'')+'</button>';}
+    h+=btopicHtml(D.rid);
+    genericSet(D.rid).forEach(k=>{if(!T[k])h+='<button class="btn" data-a="topic" data-v="'+k+'">'+esc(genericLine(D.rid,k))+'</button>';});
+    if(rc.nemesis&&rc.intel&&kn(rc.nemesis).name){const t=rc.nemesis,d=intelScore(t)-intelSold(D.rid);
+      if(!T.askintel)h+='<button class="btn" data-a="topic" data-v="askintel"><span class="tone">Ask</span>"What do you know about the '+esc(RACE[t].short)+'?"'+(askIntelCost(D.rid)?' · they may ask ¢'+askIntelCost(D.rid):'')+'</button>';
+      if(!T.intel)h+='<button class="btn pri" data-a="topic" data-v="intel"><span class="tone">Offer</span>Share my intel on the '+esc(RACE[t].short)+' (sell) · '+(d>0?'about ¢'+(30+d*25):'nothing new')+'</button>';}
     if(!G.visit.bribed&&G.credits>=bribeCost(D.rid))h+='<button class="btn" data-a="topic" data-v="bribe">Offer a goodwill payment · ¢'+bribeCost(D.rid)+'</button>';
     const gift=giftable(D.rid);if(gift&&!T.gift)h+='<button class="btn" data-a="topic" data-v="gift">Offer a gift of '+esc(RES[gift].name)+'</button>';
     if(D.offer)h+='<p class="small">Favor reward: '+favorRewardText(D.offer)+' · takes 1 hold slot · no time limit</p><button class="btn pri" data-a="fav-yes"><span class="tone">Favor</span>"Happy to help."</button><button class="btn" data-a="fav-no">"Not this time."</button>';
@@ -545,7 +549,7 @@ VIEWS.comms=()=>{
 };
 VIEWS.trade=()=>{
   const s=here();let h='<h2>CARGO · TRADE</h2>';
-  const m=market();
+  const m=market();mObserve(s,m);
   if(m.refuse)return h+'<p>'+esc(m.refuse)+'</p>'+cargoTable(null);
   h+='<p class="small">'+esc(m.note)+'</p>';
   h+=refuelBtn();
@@ -559,6 +563,30 @@ VIEWS.trade=()=>{
   h+='<p class="small">Wanted goods fetch less as a market fills up; demand recovers a little with every warp jump.</p>';
   return h;
 };
+/* v3.2 Market Research: only what the player has observed or heard */
+function mObserve(s,m){if(!m||m.refuse||!m.items)return;const O=(G.mobs=G.mobs||{});const rid=s.port?null:act(s);const it={};m.items.forEach(x=>{it[x.id]={buy:x.buy,sell:x.full?null:x.sell};});O[s.id]={turn:G.turn,rid,items:it};}
+function mLeads(){const out=[];(G.leads||[]).forEach(l=>{Object.keys(RES).forEach(id=>{if(l.text.toLowerCase().replace(/[^a-z]/g,'').includes(RES[id].name.toLowerCase().replace(/[^a-z]/g,'')))out.push({id,rid:l.rid,turn:l.turn,text:l.text});});});
+  Object.keys(G.kn||{}).forEach(rid=>{const w=kn(rid).wants;if(w&&Array.isArray(w.v))w.v.forEach(id=>{if(RES[id])out.push({id,rid,turn:null,text:(w.r?'Rumored: ':'')+'the '+RACE[rid].short+' want '+RES[id].name});});});return out;}
+function mSeen(){const S=new Set(Object.keys(G.cargo||{}).filter(k=>G.cargo[k]>0));Object.values(G.mobs||{}).forEach(o=>Object.keys(o.items).forEach(k=>S.add(k)));mLeads().forEach(l=>S.add(l.id));return [...S].filter(k=>RES[k]).sort((a,b)=>RES[a].name.localeCompare(RES[b].name));}
+function mListings(id){const sel=[],buy=[];Object.entries(G.mobs||{}).forEach(([sid,o])=>{const p=o.items[id];if(!p)return;const x={sid:+sid,rid:o.rid,age:G.turn-o.turn,d:Math.round(dist(G.loc,+sid))};if(p.buy!=null)sel.push({...x,price:p.buy});if(p.sell!=null)buy.push({...x,price:p.sell});});
+  sel.sort((a,b)=>a.price-b.price);buy.sort((a,b)=>b.price-a.price);const seen=new Set(buy.map(b=>b.rid));return{sel,buy,leads:mLeads().filter(l=>l.id===id&&!seen.has(l.rid))};}
+function mBest(){let best=null;Object.keys(G.cargo||{}).filter(k=>G.cargo[k]>0).forEach(k=>{const L=mListings(k),b=L.buy[0];if(!b)return;const P=G.paid&&G.paid[k],cost=P&&P.q?P.c/P.q:(L.sel[0]?L.sel[0].price:RES[k].base);const m=Math.round(b.price-cost);if(!best||m>best.m)best={k,m,b};});return best;}
+function mWho(x){return x.rid?(kn(x.rid).name?RACE[x.rid].short:'Unknown locals'):'Free port';}
+function mAge(a){return a<=0?'this turn':'as of '+a+' turn'+(a>1?'s':'')+' ago'+(a>=3?' · prices may have changed':'');}
+function marketView(){let h='<h2>MARKET RESEARCH</h2>';if(V.dlg&&V.dlg.rid)h+='<button class="btn" data-st-back="1" data-a="mback">← Back to comms</button>';
+  const all=mSeen();if(!all.length)return h+'<p class="small">No market data yet. Open a trade channel or listen for rumors to start building your picture of the lanes.</p>';
+  const bt=mBest();if(bt)h+='<div class="mtip"><b>Best trade from here:</b> '+esc(RES[bt.k].name)+' → '+esc(sys(bt.b.sid).name)+' ('+esc(mWho(bt.b))+') ¢'+bt.b.price+' · '+(bt.m>=0?'+':'')+'¢'+bt.m+' per unit vs what you paid · '+esc(mAge(bt.b.age))+'</div>';
+  const q=(V.mq||'').toLowerCase(),f=V.mf||'all',hold=k=>(G.cargo[k]||0)>0;
+  h+='<input id="mq" class="mq" placeholder="Search goods" value="'+esc(V.mq||'')+'"><div class="mfl">'+[['all','All'],['hold','In hold'],['priced','Priced']].map(([k,l])=>'<button class="mf'+(f===k?' on':'')+'" data-a="mf" data-v="'+k+'">'+l+'</button>').join('')+'</div>';
+  const list=all.filter(k=>(!q||RES[k].name.toLowerCase().includes(q))&&(f!=='hold'||hold(k))&&(f!=='priced'||mListings(k).sel.length+mListings(k).buy.length));
+  if(!V.mSel||!list.includes(V.mSel))V.mSel=null;
+  h+='<div class="mlist">'+list.map(k=>'<button class="mg'+(V.mSel===k?' on':'')+'" data-a="mkt" data-v="'+k+'">'+RES[k].icon+' '+esc(RES[k].name)+(hold(k)?' <em>×'+G.cargo[k]+'</em>':'')+'</button>').join('')+(list.length?'':'<p class="small">No goods match.</p>')+'</div>';
+  if(V.mSel){const k=V.mSel,L=mListings(k);const row=(x)=>'<button class="ml" data-a="mapgo" data-v="'+x.sid+'"><span>'+esc(sys(x.sid).name)+' · '+esc(mWho(x))+'</span><b>¢'+x.price+'</b><small>'+x.d+' ly · '+esc(mAge(x.age))+'</small></button>';
+    h+='<h3>'+RES[k].icon+' '+esc(RES[k].name)+'</h3><div class="cxh">Sellers (cheapest first)</div>'+(L.sel.map(row).join('')||'<p class="small">No sellers observed.</p>');
+    h+='<div class="cxh">Buyers (best price first)</div>'+(L.buy.map(row).join('')||'<p class="small">No buyers observed.</p>');
+    if(L.leads.length)h+='<div class="cxh">Leads (no price yet)</div>'+L.leads.map(l=>'<button class="ml lead" data-a="mlog" data-v="'+l.rid+'"><span>'+esc(kn(l.rid).name?RACE[l.rid].short:'Unknown')+'</span><small>'+esc(l.text)+'</small></button>').join('');
+    h+='<p class="small">Prices are the last ones you saw. Tap a listing to see it on the map, or a lead to open that race\'s log page.</p>';}
+  return h;}
 function cargoTable(){const ids=Object.keys(G.cargo).filter(k=>G.cargo[k]>0);const fv=favs().filter(f=>f.state==='open').map(f=>FAV_KIND[f.kind].icon+' '+FAV_KIND[f.kind].item+' (favor)');const all=ids.map(k=>RES[k].icon+' '+RES[k].name+' ×'+G.cargo[k]).concat(fv);return'<p class="small">Hold: '+(all.length?all.join(', '):'empty')+'</p>';}
 VIEWS.tactical=()=>{
   const E=G.enc;let h='<h2>TACTICAL</h2>';
@@ -601,9 +629,9 @@ function relRows(id,f){const k=kn(id)[f];if(!k)return UNK;if(!k.v.length)return'
   return k.v.map(x=>{const kx=kn(x);const nm=kx.name?RACE[x].short:'???';const rp=kx.portrait?tier(x)+' '+Math.round(G.races[x].rep):'???';
     return'<button class="cx" data-a="logsel" data-v="'+x+'"><b>'+esc(nm)+'</b><span>'+esc(rp)+'</span></button>';}).join('')+(k.r?'<span class="tag">rumored</span>':'');}
 function loreRows(id){const rc=RACE[id],k=kn(id),m=(G.mem||{})[id]||{},home=homeOf(id),T=(G.trades||{})[id]||[];
-  const L=[['Leader',(rc._speaker||rc.speaker)+(rc.alt?' · also: '+rc.alt.speaker:''),!!k.portrait],['Nature',rc.kind,!!k.portrait],['Temperament',rc.hint,m.n>=1],
+  const L=[['Leader',(rc._speaker||rc.speaker)+(rc.alt?' · also: '+rc.alt.speaker:''),!!k.portrait||!!(G.hackLore||{})[id]],['Nature',rc.kind,!!k.portrait],['Temperament',rc.hint,m.n>=1],
     ['Voice',{sly:'Silver-tongued; may bend the truth.',martial:'Blunt; respects strength.',gentle:'Soft-spoken; feels harm deeply.',formal:'Measured and protocol-minded.'}[voice(rc)],m.n>=2||!!(k.allies&&!k.allies.r)],
-    ['Known ships',(rc.ships||[]).join(', '),!!(G.hist[id]||[]).some(x=>/ship/.test(x))||home.scan>=2],
+    ['Known ships',knownShips(id).map(([n,o])=>n+' ('+o.how+')').join('; '),knownShips(id).length>0],
     ['Sworn rival',rc.nemesis&&RACE[rc.nemesis]?RACE[rc.nemesis].short:'None',!!(rc.nemesis&&(k.enemies||G.intelSold&&G.intelSold[id]!=null))||(!rc.nemesis&&!!k.enemies)],
     ['Honesty',rc.liar?'Known to lie to outsiders.':'No record of deceit.',!!m.caught||(G.notes&&(G.notes[id]||[]).length>=2)],
     ['Commerce',T.length?T.length+' trade entries on file.':'',T.length>0]];
@@ -611,7 +639,7 @@ function loreRows(id){const rc=RACE[id],k=kn(id),m=(G.mem||{})[id]||{},home=home
 function logEntry(id){
   const k=kn(id),rc=RACE[id],st=G.races[id];
   let h=(V.logFrom?'<button class="btn pri" data-a="logret">‹ Back to conversation</button>':'')+'<button class="btn" data-a="logback">‹ All species</button>';
-  h+=k.portrait&&rc.alt?'<div style="display:flex;gap:6px"><figure style="flex:1;margin:0"><img class="big" src="'+rc.img+'" alt="'+esc(rc._speaker)+'"><figcaption class="small">'+esc(rc._speaker)+'</figcaption></figure><figure style="flex:1;margin:0"><img class="big" src="'+rc.alt.img+'" alt="'+esc(rc.alt.speaker)+'"><figcaption class="small">'+esc(rc.alt.speaker)+'</figcaption></figure></div>':k.portrait?'<img class="big" src="'+rc.img+'" alt="'+esc(rc.short)+'">':'<div class="pt" style="width:100%;height:120px">?</div>';
+  h+=k.portrait&&rc.alt?'<div style="display:flex;gap:6px"><figure style="flex:1;margin:0"><img class="big" data-a="pzoom" src="'+rc.img+'" alt="'+esc(rc._speaker)+'"><figcaption class="small">'+esc(rc._speaker)+'</figcaption></figure><figure style="flex:1;margin:0"><img class="big" data-a="pzoom" src="'+rc.alt.img+'" alt="'+esc(rc.alt.speaker)+'"><figcaption class="small">'+esc(rc.alt.speaker)+'</figcaption></figure></div>':k.portrait?'<img class="big" data-a="pzoom" src="'+rc.img+'" alt="'+esc(rc.short)+'">':'<div class="pt" style="width:100%;height:120px">?</div>';
   h+='<h2 style="margin-top:8px">'+esc(raceName(id))+'</h2>';
   // reputation
   const RL=(G.repLog||{})[id]||[];
@@ -654,12 +682,33 @@ function sysLabel(s){if(s.port)return'Free port';if(s.owner){const k=kn(s.owner)
 /* ---------------- helm ---------------- */
 function dist(a,b){return Math.hypot(sys(a).x-sys(b).x,sys(a).y-sys(b).y);}
 function fuelCost(d){return Math.max(4,Math.round(d*42*(G&&G.up&&G.up.engines?.75:1)*(G&&G.hull!=null&&G.hull<50?1.15:1)));}
+function organicLayout(N){const r=rng(0x5B320),W=364,H=Math.round(388*Math.max(2.3,Math.ceil(N/3)*.165))-24,P=[],MIN=48;
+  const ok=(x,y,m)=>x>8&&x<W-70&&y>14&&y<H-24&&P.every(p=>Math.hypot(p.x-x,p.y-y)>=m&&(Math.abs(p.y-y)>=24||Math.abs(p.x-x)>=112));
+  const voids=[];for(let i=0;i<7;i++)voids.push({x:60+r()*(W-120),y:H*(.07+i*.14)+(r()-.5)*50,r:62+r()*30});
+  const inVoid=(x,y)=>voids.some(v=>Math.hypot(v.x-x,v.y-y)<v.r);
+  P.push({x:W*.45,y:H*.5});
+  let guard=0;while(P.length<N&&guard++<5000){const cx=20+r()*(W-100),cy=20+r()*(H-50);if(inVoid(cx,cy)||!ok(cx,cy,MIN*2.6))continue;
+    const k=Math.min(N-P.length,3+Math.floor(r()*4));let placed=0;for(let t=0;t<60&&placed<k;t++){const a=r()*6.283,d=placed?MIN+r()*10:0,x=cx+Math.cos(a)*d*1.15,y=cy+Math.sin(a)*d*.75;if(!inVoid(x,y)&&ok(x,y,MIN)){P.push({x,y});placed++;}}}
+  for(let m=MIN;P.length<N;m-=2){for(let t=0;t<4000&&P.length<N;t++){const x=r()*W,y=r()*H;if((m<36||!inVoid(x,y))&&ok(x,y,m))P.push({x,y});}}
+  organicLayout.voids=voids.map(v=>({x:v.x/W,y:v.y/H,r:v.r}));return P.map(p=>({x:p.x/W,y:p.y/H}));}
+function galaxyFeatures(P,w,h){const N=G.systems.length;if(!organicLayout.voids||organicLayout.n!==N){organicLayout(N);organicLayout.n=N;}
+  const r=rng(0xA57E5),F=[];const pal=[[120,90,200],[60,140,200],[200,90,150],[70,170,150],[210,140,80]];
+  organicLayout.voids.forEach((v,i)=>{const cx=12+v.x*(w-24),cy=12+v.y*(h-24);let rad=v.r;G.systems.forEach(s=>{const[px,py]=P(s);rad=Math.min(rad,Math.hypot(px-cx,py-cy)-22);});if(rad<28)return;
+    const kind=i%2?'rocks':'neb';const f={kind,x:cx,y:cy,r:rad,c:pal[i%pal.length],rocks:[]};
+    if(kind==='rocks')for(let k=0;k<44;k++){const a=r()*6.283,d=Math.sqrt(r())*rad*.85;f.rocks.push([cx+Math.cos(a)*d*1.1,cy+Math.sin(a)*d*.75,1.4+r()*r()*4.5,r()*6.283]);}
+    else for(let k=0;k<4;k++)f.rocks.push([cx+(r()-.5)*rad*.9,cy+(r()-.5)*rad*.7,rad*(.45+r()*.4)]);
+    F.push(f);});return F;}
+function drawFeatures(x,F){F.forEach(f=>{if(f.kind==='neb'){f.rocks.forEach(([px,py,rr])=>{const gr=x.createRadialGradient(px,py,0,px,py,rr);gr.addColorStop(0,'rgba('+f.c.join(',')+',.3)');gr.addColorStop(1,'rgba('+f.c.join(',')+',0)');x.fillStyle=gr;x.beginPath();x.arc(px,py,rr,0,7);x.fill();});}
+  else{x.fillStyle='#6d7286';f.rocks.forEach(([px,py,s,a])=>{x.save();x.translate(px,py);x.rotate(a);x.beginPath();x.moveTo(-s,-s*.4);x.lineTo(-s*.2,-s);x.lineTo(s,-s*.3);x.lineTo(s*.6,s*.8);x.lineTo(-s*.7,s*.6);x.closePath();x.fill();x.restore();});}});}
+function routeCtrl(a,b,F){let cx=(a[0]+b[0])/2,cy=(a[1]+b[1])/2;const dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy)||1,nx=-dy/L,ny=dx/L;
+  for(const f of F){const t=Math.max(0,Math.min(1,((f.x-a[0])*dx+(f.y-a[1])*dy)/(L*L))),qx=a[0]+dx*t,qy=a[1]+dy*t,d=Math.hypot(f.x-qx,f.y-qy);
+    if(d<f.r+6){const side=((f.x-qx)*nx+(f.y-qy)*ny)>0?-1:1,push=Math.min((f.r+14-d)*2,L*.6,170);cx+=nx*side*push;cy+=ny*side*push;}}return[cx,cy];}
 function drawMap(){
   const c=$('map');if(!c)return;const w=c.clientWidth,h=Math.round(w*Math.max(2.3,Math.ceil(G.systems.length/3)*.165));c.style.height=h+'px';c.width=w*DPR;c.height=h*DPR;const x=c.getContext('2d');x.setTransform(DPR,0,0,DPR,0,0);
   x.fillStyle='#040814';x.fillRect(0,0,w,h);x.strokeStyle='#10203d';for(let i=1;i<8;i++){x.beginPath();x.moveTo(i*w/8,0);x.lineTo(i*w/8,h);x.stroke();x.beginPath();x.moveTo(0,i*h/8);x.lineTo(w,i*h/8);x.stroke();}
   const P=s=>[12+s.x*(w-24),12+s.y*(h-24)];
-  const cur=P(here());
-  if(V.sel!=null&&V.sel!==G.loc){const p=P(sys(V.sel));x.setLineDash([4,4]);x.strokeStyle='#ffcf6a';x.beginPath();x.moveTo(cur[0],cur[1]);x.lineTo(p[0],p[1]);x.stroke();x.setLineDash([]);}
+  const cur=P(here());const GF=galaxyFeatures(P,w,h);drawFeatures(x,GF);V.mapF=GF;
+  if(V.sel!=null&&V.sel!==G.loc){const p=P(sys(V.sel)),q=routeCtrl(cur,p,GF);V.mapRoute=[cur,q,p];x.setLineDash([4,4]);x.strokeStyle='#ffcf6a';x.lineWidth=1.5;x.beginPath();x.moveTo(cur[0],cur[1]);x.quadraticCurveTo(q[0],q[1],p[0],p[1]);x.stroke();x.setLineDash([]);}else V.mapRoute=null;
   x.font='10px system-ui,sans-serif';x.textBaseline='middle';const LR=[];
   G.systems.forEach(s=>{const [px,py]=P(s);const lab=sysLabel(s);const pal=PAL[s.type]||PAL.terran;
     x.fillStyle=s.port?'#ffcf6a':'rgb('+pal[2].join(',')+')';x.beginPath();x.arc(px,py,s.port?5:4,0,7);x.fill();
@@ -670,12 +719,12 @@ function drawMap(){
     const bad=l=>{const ww=W2(),r={l:l-2,r:l+ww+2,t:py-7,b:py+(two?16:5)};if(r.l<1||r.r>w-1)return true;
       if(LR.some(q=>q.l<r.r&&r.l<q.r&&q.t<r.b&&r.t<q.b))return true;
       return G.systems.some(o=>{if(o===s)return false;const[ox,oy]=P(o);return ox>r.l-5&&ox<r.r+5&&oy>r.t-5&&oy<r.b+5;});};
-    let lx=px+8;if(bad(lx)){const L2=px-8-W2();if(!bad(L2))lx=L2;else{while(tx.length>4&&bad(lx)){tx=tx.slice(0,-2)+'…';}}}
-    const ww=W2();LR.push({l:lx-2,r:lx+ww+2,t:py-7,b:py+(two?16:5)});
+    let lx=px+8;if(bad(lx)){const L2=px-8-W2();if(!bad(L2))lx=L2;else{x.font='9px system-ui,sans-serif';if(!bad(lx));else if(!bad(px-8-W2()))lx=px-8-W2();else while(tx.length>4&&bad(lx)){tx=tx.slice(0,-2)+'…';}}}
+    const ww=W2();LR.push({id:s.id,tx,px,py,l:lx-2,r:lx+ww+2,t:py-7,b:py+(two?16:5)});
     x.fillStyle=s.id===G.loc?'#bfe3ff':'#8ea3c8';x.fillText(tx,lx,py-1);
     if(two){x.fillStyle=/rumored/.test(lab)?'#c9a050':'#7fe7a8';x.fillText(t2,lx,py+10);}
   });
-  c.onclick=e=>{const r=c.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;let best=null,bd=30;G.systems.forEach(s=>{const [px,py]=P(s);const d=Math.hypot(px-mx,py-my);if(d<bd){bd=d;best=s.id;}});
+  V.mapLR=LR;c.onclick=e=>{const r=c.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;let best=null,bd=30;G.systems.forEach(s=>{const [px,py]=P(s);const d=Math.hypot(px-mx,py-my);if(d<bd){bd=d;best=s.id;}});
     if(best!=null){V.sel=best;sfx('tap');renderAll();setTimeout(()=>{const b=document.querySelector('[data-a=warp],[data-a=limp]');if(b)b.scrollIntoView({behavior:'smooth',block:'center'});},50);}};
 }
 function warpTo(id,limp){
@@ -697,11 +746,96 @@ function arrive(){
   if(!s.port&&Math.random()<.3)spawnEncounter();
   commit();
 }
+/* ---- ship knowledge, scans, hacks (v3.2.0) ---- */
+const SHIP_RANK={Rumored:0,Hacked:1,Encountered:2,Scanned:3};
+function shipLearn(r,n,how){if(!RACE[r]||!n)return;const S=(G.ships=G.ships||{})[r]=(G.ships[r]||{});const o=S[n],k=how.split(' ')[0];if(!o||SHIP_RANK[k]>SHIP_RANK[o.how.split(' ')[0]])S[n]={how,t:G.turn};}
+function knownShips(r){return Object.entries((G.ships||{})[r]||{});}
+function hstr(s){let h=7;for(const c of s)h=Math.imul(h^c.charCodeAt(0),16777619);return h>>>0;}
+function ourTech(){return Math.min(5,3+(G.up&&G.up.scanner?1:0));}
+function hackRisk(rid){const t=G.races[rid].tech;let p=[0,2,5,15,30,45][t]||15;if(G.up&&G.up.scanner)p=Math.max(1,p-8);return p;}
+function shipScan(E){const r=E.race,rc=RACE[r]||SB_PIRATES,st=G.races[r],t=st?st.tech:2,f=rng(hstr(E.name+r));
+  const cls=r==='glb'?'Fishbowl skiff':['Corvette','Frigate','Courier','Light cruiser','Armed hauler','Raider'][Math.floor(f()*6)];
+  const crew=r==='glb'?1+Math.floor(f()*3):6+Math.floor(f()*(10+t*8));
+  const life=r==='glb'?crew+' Glubbari (very excited), 1 snail':crew+' '+(RACE[r]?rc.short:'mixed-species')+' life signs'+(f()<.3?', 1 unidentified':'');
+  const sh=r==='glb'?3:Math.min(99,25+t*12+Math.floor(f()*12));
+  const thr=r==='glb'?'Negligible (bubble cannons)':['Negligible','Low','Moderate','High','Severe'][Math.min(4,Math.max(0,t-1+((rc.respectsStrength||0)>.7?1:0)))];
+  const fuel=30+Math.floor(f()*65);
+  const C=['sublight drive','warp coil','cargo bay','long-range sensors','cloaking field','tractor beam','point defense','boarding pods','medical bay'];const cap=[];
+  for(let i=0;i<2+Math.min(3,t-1);i++){const c=C[Math.floor(f()*C.length)];if(!cap.includes(c))cap.push(c);}
+  if(r==='glb')cap.splice(0,cap.length,'paddle wheel','snack locker','very loud horn');
+  const A=E.anom,xs=A&&(A.ty==='captive'||A.ty==='stowaway'||A.ty==='human')?'1 '+anomSpecies(A):'';
+  const life2=r==='glb'?life:crew+' '+(RACE[r]?rc.short:'mixed-species')+(xs?', '+xs:'');
+  return{cls,life:life2,crew,sh,thr,fuel,cap,t,hidden:A&&A.ty==='hidden'};}
+function doShipScan(){const E=G.enc;if(!E||E.scan)return;E.scan=shipScan(E);V.scanUntil=performance.now()+1500;sfx('scan');
+  if(RACE[E.race]){shipLearn(E.race,E.name,'Scanned');know(E.race,'name');know(E.race,'tech');hist(E.race,'Scanned their ship '+E.name+' ('+E.scan.cls+').');note(E.race,'Ship scan: the '+E.name+' is a '+E.scan.cls.toLowerCase()+', threat '+E.scan.thr.toLowerCase()+'.','Science scan');}
+  toast('Scan complete: the '+E.name+'. Log updated.','g');commit();}
+function doHack(){const E=G.enc,rid=E&&E.race;if(!E||!E.scan||E.hack||!RACE[rid])return;const rc=RACE[rid],p=hackRisk(rid);
+  const caught=Math.random()*100<p;E.hack={caught,p,got:[]};sfx('scan');
+  if(caught){addRep(rid,-8,'caught hacking their ship');hist(rid,'Caught hacking their ship '+E.name+'.');
+    E.hack.line=(rc._speaker||rc.speaker)+': "'+(rc.id==='glb'?'HEY! That is OUR computer! Rude! RUDE! We are telling everyone!':['You crawl through our systems like vermin? We will remember this, Captain.','Intrusion detected and traced to you. Do not mistake our patience for weakness.','Our firewalls caught your fingers in the till. Keep your hands off our ships.'][hstr(rid)%3])+'"';
+    commit();return;}
+  const k=kn(rid),G2=E.hack.got;
+  rc.ships.filter(n=>n!==E.name&&!((G.ships||{})[rid]||{})[n]).slice(0,2).forEach(n=>{shipLearn(rid,n,'Hacked from the '+E.name);G2.push('Fleet roster: the '+n);});
+  ['wants','rich','allies','loc'].filter(f=>!k[f]||k[f].r).slice(0,2).forEach(f=>{know(rid,f);G2.push({wants:'What they want to buy',rich:'What their world sells',allies:'Who their allies are',loc:'Where their home is'}[f]);});
+  (G.hackLore=G.hackLore||{})[rid]=1;{const C=shipCargo(E),A=E.anom;E.hack.cargo=C;E.hack.manifest=E.scan.crew+' '+rc.short+' crew listed'+(A?{captive:'; 1 '+anomSpecies(A)+' listed as "cargo"',human:'; 1 Human listed as "passenger, unpaid"',stowaway:'; no record of the '+anomSpecies(A)+' life sign',hidden:'; hold section 7 sealed, unlisted',contraband:'; '+RES[A.good].name+' logged off the books'}[A.ty]:'');}G2.push('Leader file: '+(rc._speaker||rc.speaker));G2.push('Culture notes: '+rc.kind);
+  note(rid,'Hacked the '+E.name+': fleet roster, trade data and leader file copied.','Ship computer');hist(rid,'Quietly copied data from their ship '+E.name+'.');commit();}
+const ANOM_P={base:.18};
+function rollAnom(race,force){const rc=RACE[race];if(!rc)return null;const p=rc.slavers?.6:race==='glb'?.15:.15+(hstr(race)%11)/100;if(!force&&Math.random()>=p)return null;
+  const others=SB_RACES.filter(x=>x.id!==race&&x.id!=='glb');const ty=force||(rc.slavers?'captive':pick(Math.random,['captive','stowaway','human','hidden','contraband']));
+  const who=ty==='captive'||ty==='stowaway'?pick(Math.random,others).id:null;return{ty,who,good:pick(Math.random,SB_RES).id};}
+function anomSpecies(a){return a.ty==='human'?'Human':a.who?RACE[a.who].short:'';}
+function shipCargo(E){const f=rng(hstr(E.name+'cargo')),st=G.races[E.race],poor=f()<.25;const H={};const n=poor?1:2+Math.floor(f()*3);
+  for(let i=0;i<n;i++){const id=SB_RES[Math.floor(f()*SB_RES.length)].id;H[id]=(H[id]||0)+(poor?1+Math.floor(f()*2):3+Math.floor(f()*(6+(st?st.tech:2)*3)));}
+  if(E.anom&&(E.anom.ty==='hidden'||E.anom.ty==='contraband'))H[E.anom.good]=(H[E.anom.good]||0)+4;return{H,poor};}
+function anomFound(E){return E&&E.anom&&((E.scan&&E.anom.ty!=='contraband')||(E.hack&&!E.hack.caught))?(E.scan&&E.anom.ty!=='contraband'?'scan':'hack'):null;}
+function confrontLabel(E){const a=E.anom,rc=RACE[E.race],n=E.scan?E.scan.crew:'';
+  if(anomFound(E)==='scan'){if(a.ty==='hidden')return'"Our scan shows a shielded compartment in your hold. What are you hiding?"';
+    return'"Our scan shows '+n+' of your people and one '+anomSpecies(a)+' aboard. What\'s the story?"';}
+  if(a.ty==='contraband')return'"Your manifest lists '+RES[a.good].name+' you did not declare. Care to explain?"';
+  return'"Your manifest has an extra entry. Who else is aboard?"';}
+function confront(){const E=G.enc,rid=E.race,rc=RACE[rid],a=E.anom,src=anomFound(E);if(!a||E.confronted||!src)return;E.confronted=1;
+  me(confrontLabel(E),'Confront');markSpoke(rid);const v=voice(rc),sp=rc.speaker;const out=t=>V.dlg.lines.push({who:sp,text:t});const nar=t=>V.dlg.lines.push({who:'',text:t});
+  if(src==='hack'&&(v==='formal'||v==='martial'||rc.hatesBullies>=.6)){addRep(rid,-4,'realized you hacked them');nar('They realize you could only know that from their own computer.');out('"You were inside our systems? That is a violation, Captain."');}
+  const S=anomSpecies(a);let res;
+  if(a.ty==='captive'||a.ty==='human'){const lie=rc.liar||rc.slavers;
+    if(rc.slavers){out('"Cargo. Paid for and ours. Mind your own hold."');res='rescue-demand';}
+    else if(v==='martial'){out('"A prisoner of war. Our business, not yours."');addRep(rid,-1,'pressed about a prisoner');res='rescue-demand';}
+    else if(lie){out('"Life signs? Your sensors must be faulty. There is no one else here."');nar('Their story does not match the scan.');res='rescue-demand';}
+    else{out('"We pulled a '+S+' from a wreck. They are hurt and want to go home. Would you take them?"');res='rescue';}}
+  else if(a.ty==='stowaway'){if(v==='sly'){out('"A stowaway? Keep it quiet and here, take this for your trouble."');G.credits+=40;nar('They pay you ¢40 to forget it.');}
+    else{out('"A stowaway? We had no idea." A pause. "Ah. They say they have heard things."');nar('Intel from the stowaway: '+favorIntel()+'.');}}
+  else{const R=RES[a.good].name;if(v==='sly'){out('"Some '+R+' for you, and we never spoke of it?"');const q=addCargo(a.good,2);nar(q?'They send over '+q+' '+R+'.':'Your hold is full; they shrug.');}
+    else if(v==='martial'){out('"Search us and find out what happens."');nar('They will not budge. Nothing else comes of it.');}
+    else{out('"Undeclared '+R+'. We were going to trade it quietly. We could sell you some, cheap."');addLead(rid,'We have extra '+R+' to sell, quietly.');nar('A trade lead: the '+rc.short+' have extra '+R+'.');}}
+  if(res==='rescue'||res==='rescue-demand'){const to=a.who||null;
+    if(res==='rescue-demand'){V.dlg.rescue=1;nar(rc.slavers?'The '+rc.short+' are slavers. You could press them to release the captive.':'You could press them to release the '+S+'.');}
+    else freeCaptive(E);}
+  hist(rid,'Confronted the '+E.name+' about '+(a.ty==='hidden'||a.ty==='contraband'?'its cargo':'someone aboard')+'.');commit();}
+function freeCaptive(E){const a=E.anom,nar=t=>V.dlg.lines.push({who:'',text:t});V.dlg.rescue=0;
+  if(a.who){const f={id:'r'+Date.now().toString(36),from:a.who,to:a.who,kind:'prisoner',rescue:1,credits:100,intel:false,state:'open',t:G.turn};favs().push(f);if(!kn(a.who).name)kn(a.who).name={v:true,r:false};
+    nar('The '+RACE[a.who].short+' captive comes aboard. Return them to '+sys(G.races[a.who].home).name+' (Missions).');}
+  else{G.credits+=60;nar('The lone human comes aboard, grateful, and pays ¢60 from a hidden money belt.');}
+  sfx('ok');}
+function pressRelease(){const E=G.enc,rid=E.race,rc=RACE[rid];me('"Release them to us. Now."','Demand');V.dlg.rescue=0;
+  const ok=rc.respectsStrength>=.4||G.races[rid].tech<=ourTech();
+  if(ok){V.dlg.lines.push({who:rc.speaker,text:'"Fine. Take them. They were more trouble than they were worth."'});addRep(rid,-3,'forced to give up a captive');freeCaptive(E);if(E.anom.who)addRep(E.anom.who,3,'you rescued one of theirs');}
+  else{V.dlg.lines.push({who:rc.speaker,text:'"No. Leave, Captain, while you still can."'});V.dlg.lines.push({who:'',text:'They refuse. You note their ship in the Log.'});}
+  commit();}
+function encScienceHtml(){const E=G.enc;if(!E||E.state!=='active')return'';const isR=!!RACE[E.race];let h='<h3 class="cxh">CONTACT · '+esc(E.name.toUpperCase())+'</h3>';
+  if(!E.scan)return h+'<p class="small">An unknown vessel is in sensor range. A passive scan reveals its class, crew, defenses and capabilities. Free and undetectable.</p><button class="btn pri" data-a="escan">Scan the '+esc(E.name)+'</button>';
+  const S=E.scan;h+='<div class="kv"><b>Ship</b><span>'+esc(E.name)+' · '+esc(S.cls)+'</span><b>Race</b><span>'+(isR?esc(RACE[E.race].name):'Corsairs (no flag)')+'</span><b>Life signs</b><span>'+esc(S.life)+(anomFound(E)==='scan'?' <span class="tag">anomaly</span>':'')+'</span>'+(S.hidden?'<b>Hold</b><span>Shielded compartment detected <span class="tag">anomaly</span></span>':'')+'<b>Shields</b><span>'+S.sh+'%</span><b>Weapons threat</b><span>'+esc(S.thr)+'</span><b>Fuel</b><span>'+S.fuel+'%</span><b>Capabilities</b><span>'+esc(S.cap.join(', '))+'</span></div>';
+  if(!isR)return h;
+  if(E.hack){if(E.hack.caught)return h+'<div class="say bad"><b>Hack detected.</b> They lost trust in you (−8 relations).<br>'+esc(E.hack.line)+'</div>';
+    {const C=E.hack.cargo;h+='<div class="say"><b>Hack succeeded, undetected.</b><br>'+E.hack.got.map(esc).join('<br>')+'</div><h3 class="cxh">CARGO HOLD'+(C.poor?' · NEARLY EMPTY':'')+'</h3><div class="kv">'+Object.entries(C.H).map(([k,q])=>'<b>'+RES[k].icon+' '+esc(RES[k].name)+'</b><span>'+q+'</span>').join('')+'</div><h3 class="cxh">CREW MANIFEST</h3><p class="small">'+esc(E.hack.manifest)+'</p>';}
+    return h+(anomFound(E)&&!E.confronted?'<p class="small">Anomaly logged. Hail them to ask about it.</p>':'')+'<p class="small">Saved to the Log.</p>';}
+  const p=hackRisk(E.race),t=G.races[E.race].tech;
+  if(V.hackAsk)return h+'<div class="say"><b>Hack their computer?</b><br>Their tech '+t+'/5 vs ours '+ourTech()+'/5.<br><b>'+p+'% chance they notice.</b> If caught: −8 relations and an angry hail. No combat.<br><span class="small">One attempt per encounter.</span></div><button class="btn pri" data-a="hackgo">Hack ('+p+'% risk)</button><button class="btn" data-a="hackno">Cancel</button>';
+  return h+'<button class="btn" data-a="hackask">Hack Computer… <span class="small">'+p+'% risk</span></button>';}
 function spawnEncounter(forceRace){
   if(!forceRace&&G.escort>0){G.escort--;toast('Lanewarden escort: lane cleared. ('+G.escort+' escorts left)','g');return;}
   const pool=SB_RACES.filter(r=>G.races[r.id].rep<30&&!r.neverHostile&&r.id!=='glb');const race=forceRace||(RACE.glb&&Math.random()<.4?'glb':Math.random()<.35||!pool.length?'pir':pick(Math.random,pool).id);
   const src=RACE[race]||SB_PIRATES;G.enc={race,name:pick(Math.random,src.ships),state:'active'};
-  if(RACE[race])meet(race);
+  if(RACE[race]){G.enc.anom=rollAnom(race);meet(race);shipLearn(race,G.enc.name,'Encountered');(G.saw=G.saw||{})[race]=G.turn;}
   V.view='tactical';V.dlg=null;sfx('alert');toast(race==='glb'?'A tiny bowl-ship, the '+G.enc.name+', is "attacking" you. Adorably.':'Heads up: the '+G.enc.name+' is approaching.');
 }
 
@@ -753,17 +887,22 @@ function mem(rid){const M=G.mem=G.mem||{};return M[rid]=M[rid]||{n:0};}
 function greetFor(rid){const rc=RACE[rid],t=tier(rid);
   if(t==='hostile'||t==='trusted')return tline(rid,'greet',{},t)||(t==='trusted'?rc.greet.hi:rc.greet.lo);
   return t==='friendly'?rc.greet.hi:t==='wary'?rc.greet.lo:rc.greet.mid;}
-function metRaces(rid){return SB_RACES.filter(o=>o.id!==rid&&G.kn[o.id]&&G.kn[o.id].portrait&&(G.hist[o.id]||[]).length).map(o=>o.id);}
+function spoke(r){return !!(G.spoke&&G.spoke[r]);}
+function markSpoke(r){(G.spoke=G.spoke||{})[r]=G.turn;}
+// only races you have actually completed a comms conversation with
+function metRaces(rid){return SB_RACES.filter(o=>o.id!==rid&&spoke(o.id)).map(o=>o.id);}
+function sawRaces(rid){return SB_RACES.filter(o=>o.id!==rid&&G.saw&&G.saw[o.id]&&!spoke(o.id)).map(o=>o.id);}
 // up to 3 reactive lines: gossip heard, memory of you, your ties to their friends/foes, who else you've met
 function reactLines(rid){const out=[],m=mem(rid),H=(G.heard=G.heard||{});
   if(H[rid]&&H[rid].length){const g=H[rid].shift();out.push(tline(rid,g.good?'gossipGood':'gossip',xv(g.v,{deed:SB_DEEDS[g.k]||g.k})));}
   if(m.n>0){const k=m.caught?'caught':m.extorted?'extorted':m.gift?'gift':m.tone==='threat'?'threat':'warm';out.push(tline(rid,'memory',{n:m.n+1},k));}
-  const en=truth(rid,'enemies').filter(x=>G.races[x].rep>=30&&kn(x).portrait),al=truth(rid,'allies').filter(x=>G.races[x].rep>=30&&kn(x).portrait);
+  const en=truth(rid,'enemies').filter(x=>G.races[x].rep>=30&&spoke(x)),al=truth(rid,'allies').filter(x=>G.races[x].rep>=30&&spoke(x));
   const V0=G.visit.cozy=G.visit.cozy||{};
   if(en.length){out.push(tline(rid,'enemyCozy',xv(en[0])));if(!V0[rid]){V0[rid]=1;addRep(rid,-2,'cozy with the '+RACE[en[0]].short);}}
   else if(al.length){out.push(tline(rid,'allyCozy',xv(al[0])));if(!V0[rid]){V0[rid]=1;addRep(rid,2,'friend of the '+RACE[al[0]].short);}}
   else{const met=metRaces(rid);if(met.length){const e=met.find(x=>relOf(rid,x)===-1),a=met.find(x=>relOf(rid,x)===1);
-    out.push(e?tline(rid,'metEnemy',xv(e)):a?tline(rid,'metAlly',xv(a)):tline(rid,'metOther',xv(met[met.length-1])));}}
+    out.push(e?tline(rid,'metEnemy',xv(e)):a?tline(rid,'metAlly',xv(a)):tline(rid,'metOther',xv(met[met.length-1])));}
+    else{const sw=sawRaces(rid);if(sw.length&&Math.random()<.4)out.push('"Our sensors logged you crossing paths with a '+RACE[sw[sw.length-1]].short+' ship. Busy lanes out there."');}}
   if(rid!=='glb'&&RACE.glb&&G.kn.glb&&G.kn.glb.portrait&&typeof SB_GLUB_MOCK!=='undefined'&&out.length<3&&(V.forceMock||Math.random()<.25)){const M=SB_GLUB_MOCK[voice(RACE[rid])]||SB_GLUB_MOCK.formal;out.push(pick(Math.random,M));}
   return out.filter(Boolean).slice(0,3);}
 // gossip: deeds reach the victim's allies a few turns later
@@ -776,14 +915,14 @@ function processGossip(){const Q=G.gossip||[];const keep=[];
       note(a,'Heard via gossip that you '+(SB_DEEDS[g.k]||g.k)+' the '+RACE[g.v].short+'.',RACE[g.v].short+' allies');});});
   G.gossip=keep;}
 // leverage: name an ally you believe they have
-function leverTarget(rid){const k=kn(rid).allies;const list=k?k.v:[];return list.find(a=>RACE[a]&&G.races[a].rep>=25&&kn(a).portrait)||null;}
+function leverTarget(rid){const k=kn(rid).allies;const list=k?k.v:[];return list.find(a=>RACE[a]&&G.races[a].rep>=25&&spoke(a))||null;}
 function leverage(rid){const a=leverTarget(rid);if(!a)return;me('"The '+RACE[a].short+' will vouch for me."');
   if(relOf(rid,a)===1){addRep(rid,6,'vouched for by the '+RACE[a].short);say(tline(rid,'leverOk',xv(a)));hist(rid,'Leveraged your friendship with the '+RACE[a].short+' (+6).');}
   else{addRep(rid,-4,'false claim of friendship');say(tline(rid,'leverBad',xv(a)));hist(rid,'Claimed the '+RACE[a].short+' as their ally. They are not (-4).');
     const k=kn(rid).allies;if(k&&k.r){delete kn(rid).allies;know(rid,'allies');}}}
 // contradiction check: a confirmed statement from another race contradicts this race's claim
 function contraSource(rid){if(!(G.visit.lied&&G.visit.lied[rid]))return null;const ka=kn(rid).allies,ke=kn(rid).enemies;
-  return SB_RACES.map(o=>o.id).find(o=>{if(o===rid)return false;const k=kn(o);
+  return SB_RACES.map(o=>o.id).find(o=>{if(o===rid||!spoke(o))return false;const k=kn(o);
     return (k.enemies&&!k.enemies.r&&k.enemies.v.includes(rid)&&ka&&ka.v.includes(o))||(k.allies&&!k.allies.r&&k.allies.v.includes(rid)&&ke&&ke.v.includes(o));})||null;}
 function contradict(rid){const s=contraSource(rid),rc=RACE[rid];if(!s)return;me('"The '+RACE[s].short+' told me otherwise."','Proof');
   addRep(rid,rc.liar?rc.liar.caught[0]:2,'caught in a contradiction');say(tline(rid,'contraOk',xv(s)));
@@ -809,18 +948,37 @@ function hail(rid){
   if(G.visit.hailed&&G.visit.hailed.tone){V.dlg={rid,stage:'topics',lines:chatOf(rid)};opener(rid);V.dlg.lines.push({who:rc.speaker,text:'"Back again so soon, Captain? Go on."'});V.talkUntil=performance.now()+2000;return;}
   const g=greetFor(rid),rx=reactLines(rid);const M=mem(rid);M.n++;M.last=G.turn;
   if(rc.alt){G.visit.alt=M.n%2===0?rid:null;}
-  V.dlg={rid,stage:'tone',lines:chatOf(rid)};opener(rid);if(G.visit.alt===rid){V.dlg.lines.push({who:rc.speaker,text:pick(Math.random,rc.alt.intro)});if(Math.random()<.5)V.dlg.lines.push({who:rc.speaker,text:pick(Math.random,rc.alt.lines)});}V.dlg.lines.push({who:rc.speaker,text:g});rx.forEach(t=>V.dlg.lines.push({who:rc.speaker,text:t}));const co=residents(here()).find(o=>o!==rid);if(co&&rc.nb){V.dlg.lines.push({who:rc.speaker,text:pick(Math.random,rc.nb)});meet(co);}G.visit.hailed={};V.talkUntil=performance.now()+2600;
+  V.dlg={rid,stage:'tone',lines:chatOf(rid)};V.dlg.base=V.dlg.lines.length;opener(rid);if(G.visit.alt===rid){V.dlg.lines.push({who:rc.speaker,text:pick(Math.random,rc.alt.intro)});if(Math.random()<.5)V.dlg.lines.push({who:rc.speaker,text:pick(Math.random,rc.alt.lines)});}V.dlg.lines.push({who:rc.speaker,text:g});rx.forEach(t=>V.dlg.lines.push({who:rc.speaker,text:t}));const co=residents(here()).find(o=>o!==rid);if(co&&rc.nb){V.dlg.lines.push({who:rc.speaker,text:pick(Math.random,rc.nb),nb:co});}G.visit.hailed={};V.talkUntil=performance.now()+2600;
   if(!G.hist[rid])hist(rid,'First contact at '+here().name+'.');
-  qEvent('talk',rid).forEach(t=>V.dlg.lines.push({who:t[0]==='"'?rc.speaker:'',text:t}));qStart(rid);
+  qEvent('talk',rid).forEach(t=>V.dlg.lines.push({who:t[0]==='"'?rc.speaker:'',text:t,quest:1}));if(M.n>=2)qStart(rid);
   if(rc.lieSense&&!G.visit.lieChecked){G.visit.lieChecked=1;let fixed=null;for(const o of SB_RACES){const k=G.kn[o.id];if(!k)continue;for(const f in k){if(f==='portrait'||f==='name'||!k[f]||!k[f].r)continue;let t;try{t=truth(o.id,f);}catch(e){continue;}if(t!==undefined&&JSON.stringify(t)!==JSON.stringify(k[f].v)){k[f]={v:t,r:false};fixed=[o,f];break;}}if(fixed)break;}
     V.dlg.lines.push({who:rc.speaker,text:fixed?'"One of your rumors about the '+fixed[0].short+' ('+fixed[1]+') was a lie. We have corrected your log."':'"Your log holds no lies we can see. Well kept, Captain."'});if(fixed)note(fixed[0].id,'Kagerin exposed a false rumor about '+fixed[1]+'.','kgr');}
   if((rid==='kgr'||rid==='elv')&&RACE.ost&&!(G.flags&&G.flags.ostEv)){G.flags=G.flags||{};G.flags.ostEv=1;V.dlg.lines.push({who:rc.speaker,text:rid==='kgr'?'"A warning, Captain. The Ostrevayne salons hide locked dormitories. Their \'labor contracts\' are chains in silk."':'"The Ostrevayne... smile... over locked doors. Their contracts... are cages... with good manners."'});note('ost','The '+rc.short+' say the labor contracts hide holding pens.',rid);}
   if(RACE.lmn&&rid!=='lmn'&&!(G.flags&&G.flags.lumEv)&&Math.random()<.25){G.flags=G.flags||{};G.flags.lumEv=1;V.dlg.lines.push({who:rc.speaker,text:'"Careful with the Luminae. We fell for them once: one smile, and we traded away half a harvest. Read their terms twice."'});note('lmn','The '+rc.short+' warn their gifts hide bad terms.',rid);}
   if(rc.warden){const adv=pick(Math.random,['GLUBBARI DRIFT DETECTED NEAR OUTER LANES. RECOMMEND: SPRAY, DO NOT FIRE.','PIRATE SIGNATURES: 2. RECOMMEND: ESCORT OR ALTERNATE ROUTE.','ION STORM: DISSIPATING. LANES: NOMINAL.','HAZARD LEVEL: LOW. PROCEED.']);V.dlg.lines.push({who:rc.speaker,text:'"ADVISORY: '+adv+'"'});}
-  if(rc.rumorHub&&!G.visit.hubTold){const un=SB_RACES.filter(o=>o.id!==rid&&!(G.kn[o.id]&&(G.kn[o.id].portrait||G.kn[o.id].name)));if(un.length){G.visit.hubTold=1;const u=pick(Math.random,un),h=homeOf(u.id);V.src='Hearthmoor travelers';know(u.id,'name',undefined,true);if(h)know(u.id,'loc',undefined,true);V.dlg.lines.push({who:'',text:'Dockside chatter: a newcomer swears the '+u.short+' live near '+(h?h.name:'the edge of the charts')+'.'});note(u.id,'Rumor from Hearthmoor travelers: home near '+(h?h.name:'?')+'.','rumor');}}
-  if(rc.sage&&!G.visit.sageTold){const un=SB_RACES.filter(o=>o.id!==rid&&!(G.kn[o.id]&&(G.kn[o.id].portrait||G.kn[o.id].name)));if(un.length){G.visit.sageTold=1;const u=pick(Math.random,un),h=homeOf(u.id);V.src='The '+rc.short;know(u.id,'name',undefined,true);if(h)know(u.id,'loc',undefined,true);V.dlg.lines.push({who:rc.speaker,text:'"A riddle... for your log. Near '+(h?h.name:'the dark')+'... the '+u.short+' wait... '+(u.kind?u.kind.split(' ').slice(0,4).join(' ').toLowerCase():'')+'... Go... gently."'});note(u.id,'Rumor from the Eldervane: home near '+(h?h.name:'?')+'.','rumor');}}
+  if(rc.rumorHub&&!G.visit.hubTold){const un=SB_RACES.filter(o=>o.id!==rid&&!(G.kn[o.id]&&(G.kn[o.id].portrait||G.kn[o.id].name)));if(un.length){G.visit.hubTold=1;const u=pick(Math.random,un),h=homeOf(u.id);V.src='Hearthmoor travelers';know(u.id,'name',undefined,true);if(h)know(u.id,'loc',undefined,true);V.dlg.lines.push({who:'',rumor:1,text:'Dockside chatter: a newcomer swears the '+u.short+' live near '+(h?h.name:'the edge of the charts')+'.'});note(u.id,'Rumor from Hearthmoor travelers: home near '+(h?h.name:'?')+'.','rumor');}}
+  if(rc.sage&&!G.visit.sageTold){const un=SB_RACES.filter(o=>o.id!==rid&&!(G.kn[o.id]&&(G.kn[o.id].portrait||G.kn[o.id].name)));if(un.length){G.visit.sageTold=1;const u=pick(Math.random,un),h=homeOf(u.id);V.src='The '+rc.short;know(u.id,'name',undefined,true);if(h)know(u.id,'loc',undefined,true);V.dlg.lines.push({who:rc.speaker,rumor:1,text:'"A riddle... for your log. Near '+(h?h.name:'the dark')+'... the '+u.short+' wait... '+(u.kind?u.kind.split(' ').slice(0,4).join(' ').toLowerCase():'')+'... Go... gently."'});note(u.id,'Rumor from the Eldervane: home near '+(h?h.name:'?')+'.','rumor');}}
   if(rc.giftChance&&!G.visit.gifted&&(V.forceGift||Math.random()<rc.giftChance)){G.visit.gifted=1;nomadGift(rid);}
+  trimGreeting(rid);
 }
+// greeting = opener + at most one contextual line; everything else waits for "Any news?"
+const VAGUE_T=/^(Grand|High|Lord|Lady|Captain|Commodore|Admiral|Steward|Elder|Envoy|Mother|Father|Queen|King|Prime|Chief|First|Great|Sister|Brother|Master|Speaker|Warden|Matriarch|Patriarch|The|Of|And)$/;
+function nameTokens(x){const r=RACE[x];const t=[r.speaker];(r.speaker||'').split(/[\s,]+/).forEach(w=>{w=w.replace(/[^A-Za-z'-]/g,'');if(w.length>=4&&/^[A-Z]/.test(w)&&!VAGUE_T.test(w))t.push(w);});return t;}
+function vagueLine(text,rid,co){if(!text)return text;let out=text;
+  SB_RACES.forEach(o=>{const x=o.id;if(x===rid||spoke(x))return;let hit=false;const near=x===co||residents(here()).includes(x);
+    nameTokens(x).forEach(w=>{if(w&&out.includes(w)){hit=true;out=out.split(w).join(near?'their leader':'someone out there');}});
+    [o.name,o.short].forEach(n=>{if(!n)return;const re=new RegExp("(\\b[Tt]he |\\bour )?"+n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+"(s|'s|es)?\\b",'g');if(re.test(out)){hit=true;out=out.replace(re,near?'the folk next door':'some folk out past the lanes');}});
+    out=out.replace(/their leader (Commodore|Admiral|Steward|Elder)?/g,'their leader ');
+    if(hit){if(near&&!kn(x).name){V.src='The '+RACE[rid].short;know(x,'name',undefined,true);}note(x,'Rumor: the '+RACE[rid].short+' mentioned '+(near?'their neighbors next door':'folk out past the lanes')+'.','rumor');}});
+  return out.replace(/the folk next door neighbou?rs/g,'the folk next door').replace(/  +/g,' ').replace(/(^|[.!?]\s+|^\W*")(some|the folk|their leader|someone)/g,(m,p,w)=>p+w[0].toUpperCase()+w.slice(1));}
+function trimGreeting(rid){const D=V.dlg;if(!D||D.base===undefined)return;const add=D.lines.splice(D.base);delete D.base;
+  add.forEach(l=>{if(!l.rumor&&!l.me)l.text=vagueLine(l.text,rid,l.nb);});
+  const keep=[],q=[];add.forEach(l=>{if(l.quest||keep.length<2)keep.push(l);else q.push(l);});
+  keep.forEach(l=>D.lines.push(l));const N=(G.visit.news=G.visit.news||{});N[rid]=(N[rid]||[]).concat(q);}
+function newsTopic(rid){const D=V.dlg,rc=RACE[rid],N=(G.visit.news=G.visit.news||{});me('"Any news?"');const q=N[rid]||[];
+  if(q.length){const l=q.shift();D.lines.push(l);if(l.who===rc.speaker&&q[0]&&q[0].who==='')D.lines.push(q.shift());}
+  else{const n0=D.lines.length;qStart(rid);if(D.lines.length===n0)say(pick(Math.random,['"Nothing new, Captain. Quiet lanes."','"That is all the news I have for now."','"Come back another day. Something always happens."']));}
+  V.talkUntil=performance.now()+2200;}
 function nomadGift(rid){const rc=RACE[rid];let t;
   if(Math.random()<.5||cargoUsed()>=G.cargoMax){const c=20+Math.floor(Math.random()*41);G.credits+=c;t='The '+rc.short+' transfer ¢'+c+' to you, unasked.';hist(rid,'Gave you a gift of ¢'+c+'.');}
   else{const it=pick(Math.random,SB_RES.filter(x=>x.id!==rc.taboo)).id,q=addCargo(it,1+Math.floor(Math.random()*2));t='The '+rc.short+' beam '+q+' '+RES[it].name+' into your hold.';hist(rid,'Gave you '+q+' '+RES[it].name+'.');}
@@ -834,10 +992,20 @@ function chatOf(rid){const c=G.visit.chat=G.visit.chat||{};return c[rid]=c[rid]|
 function me(text,tone){V.dlg.lines.push({me:1,text,tone:tone||''});}
 const TOPIC_LINE={needs:'"What do your people need?"',politics:'"Who are your friends, and your rivals?"',region:'"What news from the region?"',special:'"Is there anything we can do for each other?"',press:'"Hand over your best cargo, or else."',callout:'"That\'s a lie, and I can prove it."'};
 function say(text,who){V.dlg.lines.push({who:who===undefined?RACE[V.dlg.rid].speaker:who,text});V.talkUntil=performance.now()+Math.min(4000,1000+text.length*35);}
-function chooseTone(t){
-  const rid=V.dlg.rid,rc=RACE[rid],[d,reply]=rc.tones[t];const tn=SB_TONES.find(x=>x.id===t);me(tn.line,tn.label);G.visit.hailed.tone=t;mem(rid).tone=t;
+function hailEnc(){const E=G.enc;if(!E||!RACE[E.race])return;const rid=E.race,rc=RACE[rid];meet(rid);
+  V.dlg={rid,stage:'enc',lines:[{who:'',text:'Channel open to the '+E.name+'.'}]};V.view='comms';
+  V.dlg.lines.push({who:rc.speaker,text:rid==='glb'?pick(Math.random,['"SURRENDER, LAND-BLOB! BOW BEFORE THE BOWL!"','"THIS IS THE GLORIOUS FLEET! YOU ARE SURROUNDED! (BY ONE SHIP.)"','"STAND DOWN OR FACE THE FULL WRATH OF OUR SPLASH CANNONS!"']):'"This is the '+E.name+'. Turn your ship around, Captain, or we will make you."'});
+  V.talkUntil=performance.now()+2500;}
+function encTac(v){const E=G.enc;if(!E||!V.dlg||V.dlg.stage!=='enc')return;const rid=E.race,rc=RACE[rid];
+  const L={brush:'Nudge them aside with a tractor beam.',swat:'Flick them away with a shield pulse.',ignore:'Ignore them.',scare:'"Please move along, friends."',spare:'Disable their weapons, then let them go.',loot:'Disable their engines and loot the hold.'};
+  me(L[v]||v);tac(v);V.dlg.lines.push({who:'',text:E.result||''});
+  V.dlg.lines.push({who:rc.speaker,text:rid==='glb'?(v==='brush'?'"TACTICAL RETREAT! THIS IS NOT OVER, LAND-BLOB!"':v==='swat'?'"WE MEANT TO DO THAT!"':'"VICTORY! TELL THE HISTORIANS!"'):(v==='loot'?'"You will regret this, Captain."':v==='spare'?'"...We will remember the mercy."':'"Fine. We are leaving."')});
+  markSpoke(rid);hist(rid,'Spoke with them over comms during an encounter.');V.view='comms';commit();}
+function chooseTone(t){const n0=V.dlg.lines.length;chooseTone0(t);V.dlg.lines.slice(n0).forEach(l=>{if(!l.me&&l.who)l.text=vagueLine(l.text,V.dlg.rid);});}
+function chooseTone0(t){if(!SB_TONE_POOL[t])t='friendly';
+  const rid=V.dlg.rid,rc=RACE[rid],d=sbTemper(rc)[t],reply=sbToneReply(rc,t);const tn=toneSet(rid).find(x=>x.id===t)||{id:t,label:SB_TONE_POOL[t].labels[0],line:SB_TONE_POOL[t].lines[0]};me(tn.line,tn.label);markSpoke(rid);G.visit.hailed.tone=t;mem(rid).tone=t;
   addRep(rid,d,t==='threat'?'threatened':'tone');if(rc.friendBoost&&d>0)addRep(rid,d*(rc.friendBoost-1),'eager to be liked');if(t==='threat')bully(rid,3,'');
-  hist(rid,'Opened talks in a '+SB_TONES.find(x=>x.id===t).label.toLowerCase()+' tone ('+(d>=0?'+':'')+d+').');
+  hist(rid,'Opened talks in a '+tn.label.toLowerCase()+' tone ('+(d>=0?'+':'')+d+').');{const TT=sbTemper(rc),mx=Math.max(...Object.values(TT)),mn=Math.min(...Object.values(TT));G.temperKnown=G.temperKnown||{};if(!G.temperKnown[rid]&&(d===mx||d===mn||mem(rid).n>=2)){G.temperKnown[rid]=1;note(rid,'Temperament: '+SB_ARCH[sbArch(rc)].hint,'temper');}}
   say(reply);V.dlg.stage='topics';sfx(d>=0?'ok':'bad');
   if(rc.nemesis&&rc.intel&&rc.intel.probes)say(pick(Math.random,rc.intel.probes));
   const of=rollFavor(rid,V.forceFavor);if(of){V.dlg.offer=of;say(favorPitch(of));}
@@ -850,11 +1018,11 @@ function lied(rid,f){(G.visit.lied=G.visit.lied||{})[rid]=1;}
 function lieProof(rid){if(homeOf(rid).scan>=2)return true;if(empathSense())return true;return SB_RACES.some(o=>{if(o.id===rid)return false;const k=kn(o.id);return['allies','enemies'].some(f=>k[f]&&!k[f].r&&k[f].v.includes(rid));});}
 function giftable(rid){const rc=RACE[rid];return [...rc.wants,rc.secretWant].find(x=>(G.cargo[x]||0)>0)||null;}
 function topic(v){
-  const rid=V.dlg.rid,rc=RACE[rid],st=G.races[rid];G.visit.topics[v]=1;
-  if(v==='intel'){sellIntel(rid);commit();return;}
+  const rid=V.dlg.rid,rc=RACE[rid],st=G.races[rid];if(v==='news'){newsTopic(rid);commit();return;}G.visit.topics[v]=1;
+  if(v==='intel'){sellIntel(rid);commit();return;}if(v==='askintel'){askIntel(rid);commit();return;}
   if(v==='leverage'){leverage(rid);commit();return;}if(v==='contradict'){contradict(rid);commit();return;}if(v==='tip'){tip(rid);commit();return;}
   if(v==='bribe'){const c=bribeCost(rid);if(G.credits<c)return;G.credits-=c;G.visit.bribed=1;me('Slides a credit chit across ('+'¢'+c+').','Bribe');addRep(rid,RACE[rid].hatesBullies>.7?2:5,'bribe');mem(rid).gift=1;say(RACE[rid].liar?'"How generous. We will remember this... fondly."':'"A contribution to the people. Accepted."');hist(rid,'You paid a ¢'+c+' gift of goodwill.');commit();return;}
-  if(v==='gift'){const g0=giftable(rid);if(g0)me('Offers a gift of '+RES[g0].name+'.','Gift');}else me(TOPIC_LINE[v],v==='press'?'Threat':'');
+  if(v==='gift'){const g0=giftable(rid);if(g0)me('Offers a gift of '+RES[g0].name+'.','Gift');}else me(SB_GENERIC[v]?genericLine(rid,v):TOPIC_LINE[v],v==='press'?'Threat':'');
   if(v==='needs'){
     if(st.rep<-20){say('"What we need is for you to leave."');}
     else if(lies(rid)){const fake=shuffle(Math.random,SB_RES.map(x=>x.id).filter(x=>!rc.wants.includes(x)&&x!==rc.taboo)).slice(0,3);know(rid,'wants',fake,true);lied(rid,'wants');
@@ -887,17 +1055,41 @@ function topic(v){
   commit();
 }
 /* intel market: races with a nemesis pay for what you know about it. Only new intel pays. */
+function askIntelCost(rid){const r=G.races[rid].rep;return r>=30?0:r>=0?25:60;}
+function askIntel(rid){const rc=RACE[rid],t=rc.nemesis,c=askIntelCost(rid);me('"What do you know about the '+RACE[t].short+'?"','Ask');
+  if(c&&G.credits<c){say('"Information costs ¢'+c+', Captain. Come back with coin."');G.visit.topics.askintel=0;return;}
+  const k=kn(t),f=['loc','wants','enemies','allies'].find(x=>!k[x])||['loc','wants','enemies','allies'].find(x=>k[x].r)||'wants';
+  if(c){G.credits-=c;V.dlg.lines.push({who:'',text:'You paid the '+rc.short+' ¢'+c+' for what they know.'});}
+  {const sn=(RACE[t].ships||[]).find(n=>!((G.ships||{})[t]||{})[n]);if(sn&&Math.random()<.6){shipLearn(t,sn,'Rumored from the '+rc.short);V.dlg.lines.push({who:'',text:'They also mention a '+RACE[t].short+' ship, the '+sn+'. Added to Known Ships (rumored).'});}}V.src='The '+rc.short;let v;try{v=truth(t,f);}catch(e){v=undefined;}
+  const desc=f==='loc'?('they live near '+((homeOf(t)||{}).name||'the edge of the charts')):f==='wants'?('they want '+(RACE[t].wants||[]).map(w=>RES[w]?RES[w].name:w).join(', ')):f==='enemies'?('their rivals: '+((v||[]).map(x=>RACE[x]?(spoke(x)?RACE[x].short:'some folk out past the lanes'):x).join(', ')||'none they admit')):('their friends: '+((v||[]).map(x=>RACE[x]?(spoke(x)?RACE[x].short:'some folk out past the lanes'):x).join(', ')||'none we know of'));
+  if(v!==undefined)know(t,f,v,true);say('"The '+RACE[t].short+'? Here is what we know: '+desc+'. Take it with a grain of salt."');
+  V.dlg.lines.push({who:'',text:'The '+rc.short+' shared intel on the '+RACE[t].short+' with you. Logged in the compendium (rumored).'});
+  note(t,'The '+rc.short+' told you: '+desc+'.','rumor');hist(rid,'Shared their intel on the '+RACE[t].short+' with you'+(c?' for ¢'+c:'')+'.');}
+/* v3.2 approaches + bespoke topics */
+function toneSet(rid){const rc=RACE[rid],s=sbToneSet(rc,(G.visit.id||0)+':'+mem(rid).n);if(!s.some(x=>x.id==='friendly')){const P=SB_TONE_POOL.friendly,h=sbHash(G.visit.id+rid);s.unshift({id:'friendly',label:P.labels[h%3],line:P.lines[(h>>2)%3]});s.splice(4);}
+  if(!s.some(x=>sbTemper(rc)[x.id]>=3)){const g=SB_TONE_IDS.find(x=>sbTemper(rc)[x]>=3);if(g){const P=SB_TONE_POOL[g];s[s.length-1]={id:g,label:P.labels[0],line:P.lines[0]};}}return s;}
+function genericSet(rid){const K=['needs','politics','region','special'],o=sbHash((G.visit.id||0)+rid)%4;return K.slice(o).concat(K.slice(0,o));}
+function genericLine(rid,k){const v=voice(RACE[rid]),L=SB_GENERIC[k];return L[v]||L.formal;}
+function btNode(rid,path){let n=null,list=sbTopics(RACE[rid]);for(const i of String(path).split('.')){n=list[+i];if(!n)return null;list=n.f||[];}return n;}
+function btOk(rid,n){const q=n.need||{};return (!q.rep||G.races[rid].rep>=q.rep)&&(!q.visit||mem(rid).n>=q.visit);}
+function btopicHtml(rid){const D=V.dlg,A=(G.visit.bt=G.visit.bt||{})[rid]=(G.visit.bt[rid]||{});let h='';
+  if(D.bnode){const n=btNode(rid,D.bnode);(n&&n.f||[]).forEach((c,i)=>{const p=D.bnode+'.'+i;if(!A[p]&&btOk(rid,c))h+='<button class="btn" data-a="bt" data-v="'+p+'"><span class="tone">Follow up</span>'+esc(c.q)+'</button>';});}
+  const top=sbTopics(RACE[rid]).map((n,i)=>[n,i]).filter(([n,i])=>btOk(rid,n));const off=mem(rid).n%Math.max(1,top.length);
+  top.slice(off).concat(top.slice(0,off)).slice(0,3).forEach(([n,i])=>{if(!A[i])h+='<button class="btn" data-a="bt" data-v="'+i+'">'+esc(n.q)+'</button>';});return h;}
+function btAsk(rid,path){const n=btNode(rid,path);if(!n||!btOk(rid,n))return;const A=(G.visit.bt=G.visit.bt||{})[rid]=(G.visit.bt[rid]||{});A[path]=1;
+  me(n.q);say(n.a);const M=mem(rid),S=(M.bt=M.bt||{});if(!S[path]){S[path]=1;if(n.rep)addRep(rid,n.rep,'enjoyed the conversation');if(n.lore)note(rid,n.lore,'lore');}
+  V.dlg.bnode=(n.f&&n.f.length)?String(path):null;}
 function intelScore(t){const k=G.kn[t]||{};let s=0;for(const f in k){if(k[f])s+=k[f].r?1:2;}
   s+=Math.min(6,(G.hist[t]||[]).length);favs().forEach(f=>{if(f.state!=='offer'&&(f.to===t||f.from===t))s+=2;});return s;}
 function intelSold(rid){return (G.intelSold=G.intelSold||{})[rid]||0;}
 function intelGrade(d){return d<=0?'nothing new':d<4?'scraps':d<10?'solid':'explosive';}
 function sellIntel(rid){const rc=RACE[rid],t=rc.nemesis,I=rc.intel,sc=intelScore(t),d=sc-intelSold(rid);
-  me('Shares everything you know about the '+RACE[t].short+'.','Intel');
+  me('"Here is everything we know about the '+RACE[t].short+'. What is it worth to you?"','Sell intel');
   if(!kn(t).name){say(I.none);return;}
   if(d<=0){say(I.stale);addRep(rid,1,'tried to help');return;}
   G.intelSold[rid]=sc;const cr=30+d*25;G.credits+=cr;let r='+¢'+cr;
   if(d>=6){const it=pick(Math.random,SB_RES.filter(x=>x.id!==rc.taboo)).id,q=addCargo(it,2+Math.floor(d/4));if(q)r+=', '+q+' '+RES[it].name;}
-  say(d>=8?I.big:I.small);V.dlg.lines.push({who:'',text:'The '+rc.short+' pay for your intel on the '+RACE[t].short+': '+r+'.'});
+  say(d>=8?I.big:I.small);V.dlg.lines.push({who:'',text:'You sold your intel on the '+RACE[t].short+' to the '+rc.short+'. They paid you '+r+'.'});
   ripple(rid,Math.min(18,3+Math.round(d*1.5)),'intel on the '+RACE[t].short);know(rid,'enemies');
   hist(rid,'Sold intel on the '+RACE[t].short+' ('+intelGrade(d)+', '+r+').');hist(t,'You sold their secrets to the '+rc.short+'.');gossip(t,'sold');G.intelSold[rid]=intelScore(t);sfx('coin');}
 function special(i){
@@ -966,7 +1158,7 @@ function favorIntel(){const undisc=SB_RACES.filter(r=>!(kn(r.id).loc&&!kn(r.id).
   if(undisc.length){const t=pick(Math.random,undisc).id;if(!kn(t).name)kn(t).name={v:true,r:true};know(t,'loc',undefined,true);hist(t,'Rumor via a favor: homeworld at '+sys(G.races[t].home).name+'.');return'the '+RACE[t].short+' homeworld lies at '+sys(G.races[t].home).name+' (marked on your map as rumored)';}
   const a=pick(Math.random,SB_RACES).id,f=pick(Math.random,['allies','enemies']);know(a,f,undefined,true);return'the '+RACE[a].short+' '+describe(a,f,truth(a,f));}
 function deliverFavor(fid){const f=favs().find(x=>x.id===fid&&x.state==='open');if(!f)return;const here_=V.dlg.rid,K=FAV_KIND[f.kind];
-  if(here_===f.to){f.state='done';me('Hands over the '+K.item.toLowerCase()+' from the '+RACE[f.from].short+'.');
+  if(here_===f.to){f.state='done';me(f.rescue?'Brings home the rescued '+RACE[f.to].short+'.':'Hands over the '+K.item.toLowerCase()+' from the '+RACE[f.from].short+'.');
     const shady=f.kind==='dossier';addRep(f.from,shady?10:8,'favor delivered');addRep(f.to,shady?1:6,'favor received');
     say(shady?'"A dossier? How... interesting. Thank you, Captain."':'"From the '+RACE[f.from].short+'? How kind. Our thanks, Captain."');
     let r='Favor complete for the '+RACE[f.from].short+'.';if(f.credits){G.credits+=f.credits;r+=' +¢'+f.credits+'.';}
@@ -1064,12 +1256,14 @@ document.addEventListener('pointerdown',()=>{audioInit();if(AU.ctx&&AU.ctx.state
 $('stations').addEventListener('click',e=>{const b=e.target.closest('[data-st]');if(!b)return;V.view=b.dataset.st;V.logSel=null;V.logFrom=null;sfx('tap');
   if(V.view==='comms'&&!V.dlg&&here().owner&&G.visit.hailed)hail(act(here()));
   renderAll();});
+$('panel').addEventListener('input',e=>{if(e.target.id!=='mq')return;V.mq=e.target.value;renderAll();const i=$('mq');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}});
 $('panel').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b||b.disabled)return;const a=b.dataset.a,v=b.dataset.v;sfx('tap');
   switch(a){
     case 'warp':warpTo(V.sel);break;
     case 'limp':{const ports=G.systems.filter(s=>s.port).sort((p,q)=>dist(G.loc,p.id)-dist(G.loc,q.id));toast('Running on fumes... limping to '+ports[0].name+'.');warpTo(ports[0].id,true);break;}
     case 'scan1':scan(1);break;case 'scan2':scan(2);break;
     case 'hail':hail(v&&residents(here()).includes(v)?v:act(here()));commit();break;
+    case 'bt':btAsk(V.dlg.rid,v);commit();break;
     case 'tone':chooseTone(v);break;case 'topic':topic(v);break;case 'spec':special(+v);break;
     case 'close':V.dlg=null;commit();break;
     case 'go-trade':V.view='trade';renderAll();break;
@@ -1079,7 +1273,12 @@ $('panel').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(
     case 'refuel':refuel();break;case 'repair':repair();break;case 'upg':buyUpg(v);break;case 'mapgo':V.logFrom=null;V.logSel=null;V.sel=+v;V.mapAt=null;V.mapFocus=+v;V.view='helm';renderAll();break;
     case 'fav-yes':favorAnswer(true);break;case 'fav-no':favorAnswer(false);break;case 'fav-give':deliverFavor(v);break;
     case 'tac':tac(v);break;
-    case 'tac-done':G.enc=null;V.view='helm';commit();break;
+    case 'pzoom':{const o=document.createElement('div');o.id='pz';o.innerHTML='<img src="'+b.getAttribute('src')+'" alt=""><span>Tap to close</span>';o.onclick=()=>o.remove();document.body.appendChild(o);break;}case 'confront':confront();break;case 'press':pressRelease();break;case 'escan':doShipScan();break;case 'hackask':V.hackAsk=1;renderAll();break;case 'hackno':V.hackAsk=0;renderAll();break;case 'hackgo':V.hackAsk=0;doHack();break;
+    case 'hail-enc':hailEnc();commit();break;
+    case 'enc-tac':encTac(v);break;
+    case 'enc-close':G.enc=null;V.dlg=null;V.view='helm';commit();break;
+    case 'tac-done':G.enc=null;if(V.dlg&&V.dlg.stage==='enc')V.dlg=null;V.view='helm';commit();break;
+    case 'mkt':V.view='market';V.mSel=v;renderAll();break;case 'mf':V.mf=v;renderAll();break;case 'mback':V.view='comms';renderAll();break;case 'mlog':V.logFrom=null;V.view='log';V.logSel=v;renderAll();break;
     case 'logsel':V.logSel=v;renderAll();break;case 'dlglog':V.logFrom={rid:V.dlg&&V.dlg.rid};V.view='log';V.logSel=V.dlg?V.dlg.rid:null;renderAll();break;case 'dlgmis':V.logFrom={rid:V.dlg&&V.dlg.rid};V.view='missions';renderAll();break;case 'dlgstat':V.logFrom={rid:V.dlg&&V.dlg.rid};V.view='status';renderAll();break;case 'logret':V.logFrom=null;V.logSel=null;V.view='comms';renderAll();break;case 'logback':V.logSel=null;renderAll();break;
   }});
 
@@ -1131,5 +1330,5 @@ resize();requestAnimationFrame(loop);
 if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!params.get('test'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 const tm=params.get('test');
 if(tm)testSetup(tm);else showTitle();
-SB.api={note,friendlyTow,missions,missionBadgeCount,addLead,lifeTick,warpTo,arrive,foundCount,milestones,damage,repair,buyUpg,qEvent,qStart,market,fuelCost,bribeCost,yardHtml,tier,greetFor,reactLines,processGossip,gossip,leverTarget,contraSource,tipTarget,know,kn,meet,hist,addRep,mem,relOf,truth,lies,V:()=>V,special,demOf,favs,favorAnswer,deliverFavor,newGame,warpTo,scan,hail,chooseTone,topic,trade,tac,spawnEncounter,renderAll,save,readSlot,testSetup,setView:v=>{V.view=v;renderAll();}};
+SB.api={doShipScan,doHack,hackRisk,rollAnom,confront,pressRelease,anomFound,knownShips,shipLearn,markSpoke,sawRaces,spawnEncounter,hailEnc,encTac,spoke,metRaces,note,friendlyTow,missions,missionBadgeCount,addLead,lifeTick,warpTo,arrive,foundCount,milestones,damage,repair,buyUpg,qEvent,qStart,market,fuelCost,bribeCost,yardHtml,tier,greetFor,reactLines,processGossip,gossip,leverTarget,contraSource,tipTarget,know,kn,meet,hist,addRep,mem,relOf,truth,lies,V:()=>V,special,demOf,favs,favorAnswer,deliverFavor,newGame,warpTo,scan,hail,chooseTone,topic,trade,tac,spawnEncounter,renderAll,save,readSlot,testSetup,setView:v=>{V.view=v;renderAll();}};
 })();
