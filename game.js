@@ -1,4 +1,4 @@
-/*! STARBOUND ENVOY v3.3.0 — © 2026 Rainwater Games (Jeff Rainwater). All rights reserved. */
+/*! STARBOUND ENVOY v3.3.1 — © 2026 Rainwater Games (Jeff Rainwater). All rights reserved. */
 'use strict';
 (function(){
 const VERSION='0.2';
@@ -18,7 +18,7 @@ const params=new URLSearchParams(location.search);
 
 /* ---------------- world generation ---------------- */
 function showIntro(){const d=document.createElement('div');d.id='intro';
-  d.innerHTML='<canvas id="introSky"></canvas><div class="itx"><div class="ihd">STARBOUND ENVOY</div><div class="small">TERRAN CONCORD · v3.3.0</div><p>You are an envoy of the Terran Concord, sent from Earth past the last charted star.</p><p>Find the living worlds no one has met. Learn their secrets.</p><p>Bind the galaxy together, one trade route at a time.</p><button class="btn pri" id="introGo">Begin</button><div class="small">tap anywhere to skip</div></div>';
+  d.innerHTML='<canvas id="introSky"></canvas><div class="itx"><div class="ihd">STARBOUND ENVOY</div><div class="small">TERRAN CONCORD · v3.3.1</div><p>You are an envoy of the Terran Concord, sent from Earth past the last charted star.</p><p>Find the living worlds no one has met. Learn their secrets.</p><p>Bind the galaxy together, one trade route at a time.</p><button class="btn pri" id="introGo">Begin</button><div class="small">tap anywhere to skip</div></div>';
   document.body.appendChild(d);const c=d.querySelector('canvas'),x=c.getContext('2d');c.width=innerWidth;c.height=innerHeight;
   const st=[...Array(160)].map(()=>({x:Math.random()*c.width,y:Math.random()*c.height,z:Math.random()*2+.3}));let on=true;
   (function fr(){if(!on)return;x.fillStyle='rgba(3,6,18,.45)';x.fillRect(0,0,c.width,c.height);st.forEach(p=>{p.y+=p.z*.6;if(p.y>c.height){p.y=0;p.x=Math.random()*c.width;}x.fillStyle='rgba(200,225,255,'+(.3+p.z/3)+')';x.fillRect(p.x,p.y,p.z,p.z);});requestAnimationFrame(fr);})();
@@ -561,7 +561,7 @@ VIEWS.comms=()=>{
     {const nq=((G.visit.news||{})[D.rid]||[]).length;h+='<button class="btn" data-a="topic" data-v="news">"Any news?"'+(nq?' <span class="tone">'+nq+' new</span>':'')+'</button>';}
     h+=btopicHtml(D.rid);
     genericSet(D.rid).forEach(k=>{if(!T[k])h+='<button class="btn" data-a="topic" data-v="'+k+'">'+esc(genericLine(D.rid,k))+'</button>';});
-    if(rc.nemesis&&rc.intel&&kn(rc.nemesis).name){const t=rc.nemesis,d=intelScore(t)-intelSold(D.rid);
+    if(rc.nemesis&&rc.intel&&knowWell(rc.nemesis)){const t=rc.nemesis,d=intelScore(t)-intelSold(D.rid);
       if(!T.askintel)h+='<button class="btn" data-a="topic" data-v="askintel"><span class="tone">Ask</span>"What do you know about the '+esc(RACE[t].short)+'?"'+(askIntelCost(D.rid)?' · they may ask ¢'+askIntelCost(D.rid):'')+'</button>';
       if(!T.intel)h+='<button class="btn pri" data-a="topic" data-v="intel"><span class="tone">Offer</span>Share my intel on the '+esc(RACE[t].short)+' (sell) · '+(d>0?'about ¢'+(30+d*25):'nothing new')+'</button>';}
     if(!G.visit.bribed&&G.credits>=bribeCost(D.rid))h+='<button class="btn" data-a="topic" data-v="bribe">Offer a goodwill payment · ¢'+bribeCost(D.rid)+'</button>';
@@ -1103,9 +1103,12 @@ function topic(v){
   }
   commit();
 }
-/* intel market: races with a nemesis pay for what you know about it. Only new intel pays. */
+/* intel market: races with a nemesis pay for what you know about them. Only races you have actually met / scanned / hacked. Being named as someone's enemy or friend does NOT count. */
+function knowWell(t){if(!t||!RACE[t])return false;if(kn(t).portrait)return true;
+  if(knownShips(t).some(([,x])=>/^(Scanned|Hacked|Encountered)/.test(x.how)))return true;
+  const h=homeOf(t);return !!(h&&h.scan>=1);}
 function askIntelCost(rid){const r=G.races[rid].rep;return r>=30?0:r>=0?25:60;}
-function askIntel(rid){const rc=RACE[rid],t=rc.nemesis,c=askIntelCost(rid);me('"What do you know about the '+RACE[t].short+'?"','Ask');
+function askIntel(rid){const rc=RACE[rid],t=rc.nemesis;if(!t||!knowWell(t)){say('"We have nothing useful on folk we have not met."');return;}const c=askIntelCost(rid);me('"What do you know about the '+RACE[t].short+'?"','Ask');
   if(c&&G.credits<c){say('"Information costs ¢'+c+', Captain. Come back with coin."');G.visit.topics.askintel=0;return;}
   const k=kn(t),f=['loc','wants','enemies','allies'].find(x=>!k[x])||['loc','wants','enemies','allies'].find(x=>k[x].r)||'wants';
   if(c){G.credits-=c;V.dlg.lines.push({who:'',text:'You paid the '+rc.short+' ¢'+c+' for what they know.'});}
@@ -1132,7 +1135,7 @@ function intelScore(t){const k=G.kn[t]||{};let s=0;for(const f in k){if(k[f])s+=
   s+=Math.min(6,(G.hist[t]||[]).length);favs().forEach(f=>{if(f.state!=='offer'&&(f.to===t||f.from===t))s+=2;});return s;}
 function intelSold(rid){return (G.intelSold=G.intelSold||{})[rid]||0;}
 function intelGrade(d){return d<=0?'nothing new':d<4?'scraps':d<10?'solid':'explosive';}
-function sellIntel(rid){const rc=RACE[rid],t=rc.nemesis,I=rc.intel,sc=intelScore(t),d=sc-intelSold(rid);
+function sellIntel(rid){const rc=RACE[rid],t=rc.nemesis,I=rc.intel;if(!t||!knowWell(t)){me('"I… may have spoken too soon."','Sell intel');say(I.none||'"You clearly know nothing of them."');return;}const sc=intelScore(t),d=sc-intelSold(rid);
   me('"Here is everything we know about the '+RACE[t].short+'. What is it worth to you?"','Sell intel');
   if(!kn(t).name){say(I.none);return;}
   if(d<=0){say(I.stale);addRep(rid,1,'tried to help');return;}
@@ -1383,5 +1386,5 @@ resize();requestAnimationFrame(loop);
 if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!params.get('test'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 const tm=params.get('test');
 if(tm)testSetup(tm);else showTitle();
-SB.api={travelEvent,achCheck,ACH,sellBestHere,thTag,prefs,setPref,doShipScan,doHack,hackRisk,rollAnom,confront,pressRelease,anomFound,knownShips,shipLearn,markSpoke,sawRaces,spawnEncounter,hailEnc,encTac,spoke,metRaces,note,friendlyTow,missions,missionBadgeCount,addLead,lifeTick,warpTo,arrive,foundCount,milestones,damage,repair,buyUpg,qEvent,qStart,market,fuelCost,bribeCost,yardHtml,tier,greetFor,reactLines,processGossip,gossip,leverTarget,contraSource,tipTarget,know,kn,meet,hist,addRep,mem,relOf,truth,lies,V:()=>V,special,demOf,favs,favorAnswer,deliverFavor,newGame,warpTo,scan,hail,chooseTone,topic,trade,tac,spawnEncounter,renderAll,save,readSlot,testSetup,setView:v=>{V.view=v;renderAll();}};
+SB.api={knowWell,travelEvent,achCheck,ACH,sellBestHere,thTag,prefs,setPref,doShipScan,doHack,hackRisk,rollAnom,confront,pressRelease,anomFound,knownShips,shipLearn,markSpoke,sawRaces,spawnEncounter,hailEnc,encTac,spoke,metRaces,note,friendlyTow,missions,missionBadgeCount,addLead,lifeTick,warpTo,arrive,foundCount,milestones,damage,repair,buyUpg,qEvent,qStart,market,fuelCost,bribeCost,yardHtml,tier,greetFor,reactLines,processGossip,gossip,leverTarget,contraSource,tipTarget,know,kn,meet,hist,addRep,mem,relOf,truth,lies,V:()=>V,special,demOf,favs,favorAnswer,deliverFavor,newGame,warpTo,scan,hail,chooseTone,topic,trade,tac,spawnEncounter,renderAll,save,readSlot,testSetup,setView:v=>{V.view=v;renderAll();}};
 })();
