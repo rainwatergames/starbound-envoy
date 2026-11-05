@@ -106,7 +106,7 @@ function damage(n,why){G.hull=G.hull==null?100:G.hull;if(G.up&&G.up.shields)n=Ma
   toast(t);return n;}
 const TOW_FEE=15;
 function nearestPort(){return G.systems.filter(x=>x.port).sort((p,q)=>dist(G.loc,p.id)-dist(G.loc,q.id))[0];}
-function friendlyTow(why){const p=nearestPort(),fee=Math.min(G.credits,TOW_FEE);G.credits-=fee;G.hull=Math.max(G.hull,40);G.ls=Math.max(G.ls==null?100:G.ls,60);if(G.fuel<20)G.fuel=20;G.loc=p.id;V.sel=null;
+function friendlyTow(why){st().tow=1;const p=nearestPort(),fee=Math.min(G.credits,TOW_FEE);G.credits-=fee;G.hull=Math.max(G.hull,40);G.ls=Math.max(G.ls==null?100:G.ls,60);if(G.fuel<20)G.fuel=20;G.loc=p.id;V.sel=null;
   toast('A friendly tug crew tows you to '+p.name+' ('+why+'). They patch you up for '+(fee?'¢'+fee:'free')+'. No harm done.','g');}
 function canRepair(s){return s.port||(s.owner&&G.races[act(s)]&&G.races[act(s)].rep>=15&&kn(act(s)).portrait);}
 function repairCost(){return Math.min(G.credits,(100-(G.hull==null?100:G.hull))*REPAIR_PER);}
@@ -460,7 +460,33 @@ function vsMode(){
 function toast(msg,kind){const el=document.createElement('div');el.className='toast '+(kind||'');el.textContent=msg;const box=$('toasts');box.appendChild(el);
   while(box.children.length>4)box.removeChild(box.firstChild);setTimeout(()=>el.remove(),3600);}
 function cargoUsed(){return Object.values(G.cargo).reduce((a,b)=>a+b,0)+(G.favors?G.favors.filter(f=>f.state==='open').length:0);}
-function commit(){ save(); renderAll(); }
+function commit(){ achCheck(); save(); renderAll(); }
+/* v3.3 achievements (cosmetic) and travel events */
+function st(){return G.stats=G.stats||{vis:{},goods:{},tr:0,ev:0,help:0,tow:0,whale:0,anom:0};}
+function metIds(){return SB_RACES.filter(r=>G.kn[r.id]&&G.kn[r.id].portrait).map(r=>r.id);}
+const ACH=[['m10','Friendly Faces','Meet 10 races',()=>foundCount()/10],['m25','Social Butterfly','Meet 25 races',()=>foundCount()/25],['m50','Ambassador','Meet 50 races',()=>foundCount()/50],['m88','Every Voice','Meet all 88 races',()=>foundCount()/88],
+['v5','Wanderer','Visit 5 systems',()=>Object.keys(st().vis).length/5],['v20','Pathfinder','Visit 20 systems',()=>Object.keys(st().vis).length/20],['v50','Star Cartographer','Visit 50 systems',()=>Object.keys(st().vis).length/50],
+['t10','Small Trader','Trade 10 goods',()=>st().tr/10],['t100','Merchant Prince','Trade 100 goods',()=>st().tr/100],['g','Collector','Handle every type of good',()=>Object.keys(st().goods).length/Object.keys(RES).length],
+['sc','First Look','Scan a planet',()=>+G.systems.some(s=>s.scan>0)],['hk','Quiet Fingers','Hack a ship\'s records',()=>+Object.values(G.ships||{}).some(o=>Object.values(o).some(x=>/^Hacked/.test(x.how)))],
+['rs','Good Samaritan','Rescue someone',()=>+(G.systems.some(s=>s.distress)||favs().some(f=>f.rescue&&f.state==='done'))],['an','Face the Unknown','Confront an anomaly',()=>st().anom],
+['tw','Towed Home','Survive a tow',()=>st().tow],['e1','Something Out There','Have a travel event',()=>st().ev],['e10','Seasoned Traveler','Have 10 travel events',()=>st().ev/10],
+['hp','Helping Hand','Answer 3 distress calls',()=>st().help/3],['wh','Song of the Deep','See a space whale',()=>st().whale],['nt','Diarist','Write a note in your Log',()=>+Object.values(G.pnotes||{}).some(x=>x.trim())],
+['c1k','Comfortable','Hold ¢1000',()=>G.credits/1000]];
+function achCheck(){if(!G||!G.kn)return;const A=(G.ach=G.ach||{});ACH.forEach(([id,n,,f])=>{if(!A[id]&&f()>=1){A[id]=G.turn;toast('🏅 Achievement: '+n,'g');}});}
+const EVTS=[
+ {id:'distress',t:'A faint distress call: a small ship with a blown coupling.',c:[['Help them (−5 fuel, +¢40, +rep)',r=>{G.fuel=Math.max(0,G.fuel-5);G.credits+=40;st().help++;if(r)addRep(r,3,'answered a distress call');return'They thank you warmly and press a few credits on you.';}],['Pass by and log it for port patrols',()=>'You relay their position. Someone else will get there soon.']]},
+ {id:'wreck',t:'A drifting derelict, long abandoned.',c:[['Salvage it (+¢30–80)',()=>{const c=30+Math.floor(Math.random()*51);G.credits+=c;return'You recover parts worth ¢'+c+'.';}],['Leave it in peace',()=>'You mark it on your charts and move on.']]},
+ {id:'whale',t:'A space whale glides past, singing in radio static.',c:[['Watch a while (+10 morale)',()=>{st().whale=1;G.morale=Math.min(100,(G.morale||80)+10);return'The crew falls quiet. Morale rises.';}]]},
+ {id:'pod',t:'A lost cargo pod tumbles nearby, unclaimed.',c:[['Bring it aboard (+1 good)',()=>{if(cargoUsed()>=G.cargoMax){G.credits+=20;return'Hold full. You sell the pod\'s beacon for ¢20.';}const k=pick(Math.random,Object.keys(RES));G.cargo[k]=(G.cargo[k]||0)+1;st().goods[k]=1;return'Inside: 1 '+RES[k].name+'.';}],['Leave it',()=>'Maybe its owner will find it.']]},
+ {id:'trader',t:'A stranded trader needs fuel and offers credits for it.',c:[['Sell 10 fuel for ¢60',()=>{if(G.fuel<15)return'You can\'t spare it right now. They understand.';G.fuel-=10;G.credits+=60;return'Deal. They wave as they fly off.';}],['Decline politely',()=>'They nod. Another ship is already on its way.']]},
+ {id:'ion',t:'An ion storm lies ahead.',c:[['Detour around it (−3 fuel)',()=>{G.fuel=Math.max(0,G.fuel-3);return'A short detour. Everyone stays comfortable.';}]]},
+ {id:'probe',t:'A lost survey probe pings your ship.',c:[['Read its data (a rumor)',r=>{if(!r)return'Its logs hold star charts you already have.';const z=pick(Math.random,metIds());know(z,'wants');return'The probe recorded what the '+RACE[z].short+' want in trade. Logged.';}],['Send it home',()=>'It beeps gratefully and drifts off.']]},
+ {id:'convoy',t:'A friendly pilgrim convoy shares the lane with you.',c:[['Share a meal (+5 morale, +5 life support)',()=>{G.morale=Math.min(100,(G.morale||80)+5);G.ls=Math.min(100,(G.ls||100)+5);return'Songs, stories and tea. A lovely evening.';}],['Wave and fly on',()=>'They flash their lights in greeting.']]},
+ {id:'comet',t:'A bright comet streaks past, trailing ice.',c:[['Skim some ice (+8 fuel)',()=>{G.fuel=Math.min(G.fuelMax,G.fuel+8);return'Ice melted into fuel. +8.';}]]},
+ {id:'beacon',t:'An old beacon plays a welcome message in many languages.',c:[['Listen',()=>{G.morale=Math.min(100,(G.morale||80)+3);return'A message of peace from long ago. Nice.';}]]}];
+function travelEvent(force){if(G.enc||SB.state!=='play')return;if(!force&&Math.random()>=.17)return;const e=force?EVTS.find(x=>x.id===force):pick(Math.random,EVTS);const m=metIds(),r=m.length?pick(Math.random,m):null;
+  st().ev++;modal('<h3>On the way…</h3><p>'+esc(e.t)+'</p>'+e.c.map((c,i)=>'<button class="btn" data-ev="'+i+'">'+esc(c[0])+'</button>').join(''));
+  $('modal').onclick=ev=>{const b=ev.target.closest('button');if(!b||b.dataset.ev==null)return;const msg=e.c[+b.dataset.ev][1](r);$('modal').classList.add('hide');toast(msg,'g');commit();};}
 const STATIONS=[['helm','Helm','✦'],['science','Science','◎'],['comms','Comms','☏'],['trade','Trade','⇄'],['market','Market','¢'],['tactical','Tactical','⚔'],['status','Status','⚙'],['missions','Missions','☰'],['log','Log','▤']];
 function renderStations(){
   $('stations').innerHTML=STATIONS.map(([id,l,i])=>'<button class="sb'+(V.view===id?' on':'')+(id==='tactical'&&G.enc&&G.enc.state==='active'?' alert':'')+'" data-st="'+id+'"><i>'+i+'</i>'+l+(id==='missions'&&missionBadgeCount()?'<em class="sbb">'+missionBadgeCount()+'</em>':'')+'</button>').join('');
@@ -579,6 +605,9 @@ function sellBestHere(){const s=here(),m=market();if(!m||m.refuse)return;let n=0
     const other=mListings(k).buy.filter(x=>x.sid!==s.id)[0];if(other&&other.price>it.sell)return;
     let guard=99;while(G.cargo[k]>0&&guard--){const q=G.cargo[k];const m2=market(),i2=m2.items.find(x=>x.id===k);if(!i2||i2.full)break;trade('sell',k);if(G.cargo[k]===q)break;n++;}});
   toast(n?'Sold '+n+' unit'+(n>1?'s':'')+' here for ¢'+(G.credits-c0)+' at today\'s prices.':'Nothing in your hold sells best here.',n?'g':'');V.keepScroll=true;renderAll();V.keepScroll=false;}
+VIEWS.ach=()=>{const A=G.ach||{};let h='<h2>ACHIEVEMENTS · '+Object.keys(A).length+'/'+ACH.length+'</h2><p class="small">Just for fun, no effect on play.</p>';
+  ACH.forEach(([id,n,d,f])=>{const p=Math.min(1,f()||0);h+='<div class="ach'+(A[id]?' got':'')+'"><b>'+(A[id]?'🏅 ':'○ ')+esc(n)+'</b><span class="small">'+esc(d)+(A[id]?' · turn '+A[id]:' · '+Math.floor(p*100)+'%')+'</span></div>';});
+  return h+'<button class="btn" data-a="achback">Back to Log</button>';};
 /* v3.2 Market Research: only what the player has observed or heard */
 function mObserve(s,m){if(!m||m.refuse||!m.items)return;const O=(G.mobs=G.mobs||{});const rid=s.port?null:act(s);const it={};m.items.forEach(x=>{it[x.id]={buy:x.buy,sell:x.full?null:x.sell};});O[s.id]={turn:G.turn,rid,items:it};}
 function mLeads(){const out=[];(G.leads||[]).forEach(l=>{Object.keys(RES).forEach(id=>{if(l.text.toLowerCase().replace(/[^a-z]/g,'').includes(RES[id].name.toLowerCase().replace(/[^a-z]/g,'')))out.push({id,rid:l.rid,turn:l.turn,text:l.text});});});
@@ -626,6 +655,7 @@ VIEWS.log=()=>{
   let h='<h2>COMPUTER LOG</h2>';
   if(V.logSel)return h+logEntry(V.logSel);
   if(V.logFrom)h+='<button class="btn pri" data-a="logret">‹ Back to conversation</button>';
+  h+='<button class="btn" data-a="achopen">🏅 Achievements · '+Object.keys(G.ach||{}).length+'/'+ACH.length+'</button>';
   h+='<div class="cxh">YOUR PROFILE</div><p class="small"><b>Envoy of the Terran Concord</b> · humans of Earth · Turn '+G.turn+' · ¢'+G.credits+' · Hull '+(G.hull==null?100:G.hull)+'%'+(G.miles&&Object.keys(G.miles).length?' · Title: '+MILES.filter(m=>G.miles[m[0]]).pop()[2]:'')+'</p>';
   h+=questsHtml();
   const n=foundCount(),T=SB_RACES.length;G.miles=G.miles||{};
@@ -760,7 +790,9 @@ function arrive(){
   if(s.owner&&kn(s.owner).loc&&kn(s.owner).loc.r){ if(kn(s.owner).loc.v===s.name)toast('Rumor confirmed: '+RACE[s.owner].short+' homeworld.','g'); }
   SB_RACES.forEach(r=>{const k=kn(r.id).loc;if(k&&k.r&&k.v===s.name&&!residents(s).includes(r.id)){delete kn(r.id).loc;toast('Rumor about the '+r.short+' homeworld proved false.','b');}});
   if(s.owner&&(kn(s.owner).loc||s.scan))know(s.owner,'loc');
+  st().vis[s.id]=1;
   if(!s.port&&Math.random()<.3)spawnEncounter();
+  if(!G.enc&&!V.noEvt)travelEvent(V.forceEvt);
   commit();
 }
 /* ---- ship knowledge, scans, hacks (v3.2.0) ---- */
@@ -810,7 +842,7 @@ function confrontLabel(E){const a=E.anom,rc=RACE[E.race],n=E.scan?E.scan.crew:''
     return'"Our scan shows '+n+' of your people and one '+anomSpecies(a)+' aboard. What\'s the story?"';}
   if(a.ty==='contraband')return'"Your manifest lists '+RES[a.good].name+' you did not declare. Care to explain?"';
   return'"Your manifest has an extra entry. Who else is aboard?"';}
-function confront(){const E=G.enc,rid=E.race,rc=RACE[rid],a=E.anom,src=anomFound(E);if(!a||E.confronted||!src)return;E.confronted=1;
+function confront(){const E=G.enc,rid=E.race,rc=RACE[rid],a=E.anom,src=anomFound(E);if(!a||E.confronted||!src)return;E.confronted=1;st().anom=1;
   me(confrontLabel(E),'Confront');markSpoke(rid);const v=voice(rc),sp=rc.speaker;const out=t=>V.dlg.lines.push({who:sp,text:t});const nar=t=>V.dlg.lines.push({who:'',text:t});
   if(src==='hack'&&(v==='formal'||v==='martial'||rc.hatesBullies>=.6)){addRep(rid,-4,'realized you hacked them');nar('They realize you could only know that from their own computer.');out('"You were inside our systems? That is a violation, Captain."');}
   const S=anomSpecies(a);let res;
@@ -1239,7 +1271,7 @@ function trade(kind,id){
   if(kind==='buy'){if(it.buy==null||G.credits<it.buy||cargoUsed()>=G.cargoMax)return;G.credits-=it.buy;G.cargo[id]=(G.cargo[id]||0)+1;const P=(G.paid=G.paid||{})[id]=G.paid[id]||{q:0,c:0};P.q++;P.c+=it.buy;bumpAdd(s.id,id);}
   else{if(!G.cargo[id])return;if(it.full){toast(FULL_LINE[rid]||'They have plenty of that for now.');V.keepScroll=true;renderAll();V.keepScroll=false;return;}
     G.cargo[id]--;{let pay=it.sell;if(G.tithe){if((G.flags&&G.flags.lumEv)||(G.up&&G.up.resist)){G.tithe=0;toast('You see through the Luminae tithe and stop paying it.','g');}else{const cut=Math.max(1,Math.round(pay*.1));pay-=cut;G.titheTotal=(G.titheTotal||0)+cut;toast('Luminae tithe: −¢'+cut+' of this sale.','b');}}G.credits+=pay;}if(G.paid&&G.paid[id]&&G.paid[id].q){const P=G.paid[id];P.c-=P.c/P.q;P.q--;}if(it.dem!=null)demSet(rid,id,it.dem-DEM_DROP);}
-  sfx('coin');
+  sfx('coin');st().tr++;st().goods[id]=1;
   if(rid){tradeLog(rid,kind,id,kind==='buy'?it.buy:it.sell);if(G.visit.tradeRep<5){G.visit.tradeRep++;ripple(rid,1,'trade');}
     if(kind==='sell'&&(rc.wants.includes(id)))know(rid,'wants');
     if(kind==='sell')qEvent('sell',rid,id).forEach(t=>toast(t,'g'));
@@ -1295,7 +1327,7 @@ $('panel').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(
     case 'enc-tac':encTac(v);break;
     case 'enc-close':G.enc=null;V.dlg=null;V.view='helm';commit();break;
     case 'tac-done':G.enc=null;if(V.dlg&&V.dlg.stage==='enc')V.dlg=null;V.view='helm';commit();break;
-    case 'mkt':V.view='market';V.mSel=v;renderAll();break;case 'mf':V.mf=v;renderAll();break;case 'mback':V.view='comms';renderAll();break;case 'mlog':V.logFrom=null;V.view='log';V.logSel=v;renderAll();break;
+    case 'mkt':V.view='market';V.mSel=v;renderAll();break;case 'mf':V.mf=v;renderAll();break;case 'achopen':V.view='ach';renderAll();break;case 'achback':V.view='log';renderAll();break;case 'mback':V.view='comms';renderAll();break;case 'mlog':V.logFrom=null;V.view='log';V.logSel=v;renderAll();break;
     case 'logsel':V.logSel=v;renderAll();break;case 'dlglog':V.logFrom={rid:V.dlg&&V.dlg.rid};V.view='log';V.logSel=V.dlg?V.dlg.rid:null;renderAll();break;case 'dlgmis':V.logFrom={rid:V.dlg&&V.dlg.rid};V.view='missions';renderAll();break;case 'dlgstat':V.logFrom={rid:V.dlg&&V.dlg.rid};V.view='status';renderAll();break;case 'logret':V.logFrom=null;V.logSel=null;V.view='comms';renderAll();break;case 'logback':V.logSel=null;renderAll();break;
   }});
 
@@ -1318,11 +1350,12 @@ applyTextSize();addEventListener('pagehide',()=>{try{save();}catch(e){}});docume
 $('tNew').onclick=()=>{sfx('tap');slotPicker('new');};
 $('tLoad').onclick=()=>{sfx('tap');slotPicker('load');};
 $('menuBtn').onclick=()=>{sfx('tap');if(SB.state!=='play')return;
-  modal('<h3>Ship menu</h3><p class="small">Autosaves after every action to slot '+(G.slot||'— (test mode)')+'.</p><button class="btn" data-m="snd">Sound: '+(AU.on?'On':'Off')+'</button><button class="btn" data-m="tips">Tutorial tips: '+(prefs().tipsOff?'Off':'On')+'</button><button class="btn" data-m="ts">Text size: '+({n:'Normal',l:'Large',xl:'Extra Large'}[prefs().ts||'n'])+'</button><button class="btn" data-m="load">Load game</button><button class="btn" data-m="title">Save &amp; return to title</button><button class="btn pri" data-m="x">Resume</button>');
+  modal('<h3>Ship menu</h3><p class="small">Autosaves after every action to slot '+(G.slot||'— (test mode)')+'.</p><button class="btn" data-m="snd">Sound: '+(AU.on?'On':'Off')+'</button><button class="btn" data-m="tips">Tutorial tips: '+(prefs().tipsOff?'Off':'On')+'</button><button class="btn" data-m="ts">Text size: '+({n:'Normal',l:'Large',xl:'Extra Large'}[prefs().ts||'n'])+'</button><button class="btn" data-m="ach">Achievements ('+Object.keys(G.ach||{}).length+'/'+ACH.length+')</button><button class="btn" data-m="load">Load game</button><button class="btn" data-m="title">Save &amp; return to title</button><button class="btn pri" data-m="x">Resume</button>');
   $('modal').onclick=e=>{const b=e.target.closest('button');if(!b)return;const m=b.dataset.m;sfx('tap');
     if(m==='snd'){setSound(!AU.on);b.textContent='Sound: '+(AU.on?'On':'Off');return;}
     if(m==='tips'){setPref('tipsOff',!prefs().tipsOff);b.textContent='Tutorial tips: '+(prefs().tipsOff?'Off':'On');return;}
     if(m==='ts'){const o=['n','l','xl'],c=prefs().ts||'n',nx=o[(o.indexOf(c)+1)%3];setPref('ts',nx);applyTextSize();b.textContent='Text size: '+{n:'Normal',l:'Large',xl:'Extra Large'}[nx];renderAll();return;}
+    if(m==='ach'){$('modal').classList.add('hide');V.view='ach';renderAll();return;}
     if(m==='load'){slotPicker('load');return;}
     if(m==='title'){save();$('modal').classList.add('hide');showTitle();return;}
     $('modal').classList.add('hide');};};
@@ -1350,5 +1383,5 @@ resize();requestAnimationFrame(loop);
 if('serviceWorker' in navigator&&location.protocol.startsWith('http')&&!params.get('test'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 const tm=params.get('test');
 if(tm)testSetup(tm);else showTitle();
-SB.api={sellBestHere,thTag,prefs,setPref,doShipScan,doHack,hackRisk,rollAnom,confront,pressRelease,anomFound,knownShips,shipLearn,markSpoke,sawRaces,spawnEncounter,hailEnc,encTac,spoke,metRaces,note,friendlyTow,missions,missionBadgeCount,addLead,lifeTick,warpTo,arrive,foundCount,milestones,damage,repair,buyUpg,qEvent,qStart,market,fuelCost,bribeCost,yardHtml,tier,greetFor,reactLines,processGossip,gossip,leverTarget,contraSource,tipTarget,know,kn,meet,hist,addRep,mem,relOf,truth,lies,V:()=>V,special,demOf,favs,favorAnswer,deliverFavor,newGame,warpTo,scan,hail,chooseTone,topic,trade,tac,spawnEncounter,renderAll,save,readSlot,testSetup,setView:v=>{V.view=v;renderAll();}};
+SB.api={travelEvent,achCheck,ACH,sellBestHere,thTag,prefs,setPref,doShipScan,doHack,hackRisk,rollAnom,confront,pressRelease,anomFound,knownShips,shipLearn,markSpoke,sawRaces,spawnEncounter,hailEnc,encTac,spoke,metRaces,note,friendlyTow,missions,missionBadgeCount,addLead,lifeTick,warpTo,arrive,foundCount,milestones,damage,repair,buyUpg,qEvent,qStart,market,fuelCost,bribeCost,yardHtml,tier,greetFor,reactLines,processGossip,gossip,leverTarget,contraSource,tipTarget,know,kn,meet,hist,addRep,mem,relOf,truth,lies,V:()=>V,special,demOf,favs,favorAnswer,deliverFavor,newGame,warpTo,scan,hail,chooseTone,topic,trade,tac,spawnEncounter,renderAll,save,readSlot,testSetup,setView:v=>{V.view=v;renderAll();}};
 })();
